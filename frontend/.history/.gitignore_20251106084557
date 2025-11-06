@@ -1,0 +1,35 @@
+# === Node / Vite ===
+node_modules/
+dist/
+build/
+.cache/
+coverage/
+
+# === Firebase / credenciales ===
+.env
+.env.*
+firebase-debug.log
+
+# === Archivos locales ===
+*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === IDEs ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === Sistema operativo ===
+.DS_Store
+Thumbs.db
+
+# === Tipos / TS cache ===
+*.tsbuildinfo
+
+# === Configuración temporal ===
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

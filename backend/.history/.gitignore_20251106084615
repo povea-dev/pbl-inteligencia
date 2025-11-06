@@ -1,0 +1,47 @@
+# === Python / FastAPI ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.sqlite3
+*.db
+
+# === Entornos virtuales ===
+venv/
+env/
+.venv/
+ENV/
+
+# === Archivos sensibles ===
+.env
+.env.*
+*.pem
+*.key
+
+# === Archivos temporales y logs ===
+*.log
+*.pot
+*.pyproj
+*.sublime-project
+*.sublime-workspace
+*.bak
+*.tmp
+
+# === Compilación / caché ===
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# === Herramientas de IDE ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === OS / caché ===
+.DS_Store
+Thumbs.db
+
+# === Documentación temporal ===
+docs/_build/
