@@ -1,0 +1,34 @@
+# === Archivos de historial ===
+.history/
+*.history
+
+# === Archivos sensibles ===
+.env
+.env.*
+*.pem
+*.key
+
+# === Archivos temporales ===
+*.log
+*.tmp
+*.bak
+
+# === Sistema operativo ===
+.DS_Store
+Thumbs.db
+
+# === IDEs ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === Node modules (si hay en raíz) ===
+node_modules/
+
+# === Python (si hay en raíz) ===
+__pycache__/
+*.py[cod]
+venv/
+env/
+.venv/
+

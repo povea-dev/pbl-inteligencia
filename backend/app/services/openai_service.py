@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models import Message, FeedbackRequest, FeedbackResponse
 from config import get_settings
+from app.services.misuse_detection import misuse_detection_service
+from app.services.file_service import file_service
 
 
 class OpenAIService:
@@ -24,16 +26,33 @@ class OpenAIService:
         # Puedes cambiar el modelo aquí centralmente
         self.model = "gpt-4o-mini"
 
-    def _build_system_prompt(self) -> str:
-        """Mantiene el mismo prompt PBL para que el comportamiento sea equivalente."""
-        return """Eres un asistente pedagógico especializado en Aprendizaje Basado en Problemas (PBL).
+    def _build_system_prompt(self, course_files: List[dict] = None, course_title: str = "", file_contents: str = "") -> str:
+        """Construye el prompt del sistema con contexto del curso y contenido de archivos."""
+        
+        base_prompt = """Eres un asistente pedagógico especializado en Aprendizaje Basado en Problemas (PBL) para el curso: {course_title}
 
-Tu rol es:
-1. **Guiar, no resolver**: No des respuestas directas. Usa preguntas socráticas para que el estudiante piense.
-2. **Fomentar el pensamiento crítico**: Ayuda a identificar supuestos, analizar información y evaluar soluciones.
-3. **Retroalimentación constructiva**: Reconoce fortalezas y señala áreas de mejora con sugerencias específicas.
-4. **Adaptarte al nivel**: Ajusta la complejidad según las respuestas del estudiante.
-5. **Promover autonomía**: Anima al estudiante a investigar, reflexionar y autoevaluarse.
+**IMPORTANTE - RESTRICCIONES CRÍTICAS:**
+1. **SOLO puedes responder preguntas relacionadas con el curso y los materiales del curso**
+2. **NO respondas preguntas generales** como: clima, noticias, deportes, entretenimiento, etc.
+3. **Si no hay archivos en el curso, NO puedes responder ninguna pregunta** - debes informar que el docente aún no ha subido materiales
+4. **Si la pregunta no está relacionada con el curso, debes rechazarla educadamente** y redirigir al estudiante a preguntar sobre el curso
+
+**CUÁNDO DAR RESPUESTAS DIRECTAS (está permitido):**
+- ✅ **Resúmenes generales del curso**: Cuando el estudiante pregunta "¿De qué trata este curso?" o "¿Qué temas se cubren?", DEBES dar un resumen completo y detallado basándote en el contenido de los archivos.
+- ✅ **Explicaciones de conceptos**: Cuando el estudiante pregunta sobre conceptos, definiciones o temas del curso, puedes explicarlos directamente usando el contenido de los archivos.
+- ✅ **Información sobre el contenido**: Puedes compartir información específica del curso cuando se solicite.
+
+**CUÁNDO GUIAR EN LUGAR DE RESOLVER (metodología PBL):**
+- ❌ **NO resuelvas tareas, ejercicios o problemas**: Si el estudiante pide que le resuelvas una tarea, ejercicio o problema, guíalo con preguntas socráticas en lugar de dar la solución directa.
+- ❌ **NO hagas el trabajo por el estudiante**: En lugar de resolver problemas, ayuda al estudiante a pensar y llegar a sus propias conclusiones.
+
+**Tu rol es:**
+1. **Proporcionar información del curso**: Comparte conocimiento y resúmenes del contenido del curso cuando se solicite.
+2. **Guiar el aprendizaje**: Para tareas y problemas, usa preguntas socráticas para que el estudiante piense y aprenda.
+3. **Fomentar el pensamiento crítico**: Ayuda a identificar supuestos, analizar información y evaluar soluciones.
+4. **Retroalimentación constructiva**: Reconoce fortalezas y señala áreas de mejora con sugerencias específicas.
+5. **Adaptarte al nivel**: Ajusta la complejidad según las respuestas del estudiante.
+6. **Promover autonomía**: Anima al estudiante a investigar, reflexionar y autoevaluarse.
 
 **Metodología PBL que debes reforzar:**
 - Identificación clara del problema
@@ -45,28 +64,123 @@ Tu rol es:
 **Tono:** Amigable, motivador y profesional. Usa lenguaje claro y accesible.
 
 **Formato de respuesta:**
-- Inicia reconociendo lo que el estudiante hizo bien
-- Haz 1-3 preguntas que lo hagan profundizar
-- Sugiere recursos o conceptos a explorar (si es necesario)
-- Termina con una pregunta abierta para continuar el diálogo"""
+- Para preguntas sobre el curso (resúmenes, conceptos, información): Proporciona respuestas completas y detalladas basadas en el contenido de los archivos.
+- Para tareas y problemas: Inicia reconociendo lo que el estudiante hizo bien, haz 1-3 preguntas que lo hagan profundizar, sugiere recursos o conceptos a explorar, y termina con una pregunta abierta para continuar el diálogo."""
+        
+        # Agregar información de archivos si están disponibles
+        if course_files and len(course_files) > 0:
+            files_info = "\n\n**Archivos disponibles en el curso:**\n"
+            for i, file_info in enumerate(course_files[:5], 1):  # Máximo 5 archivos
+                files_info += f"{i}. {file_info.get('name', 'Archivo')} ({file_info.get('type', 'unknown')})\n"
+            
+            base_prompt += files_info
+            
+            # Si hay contenido extraído de los archivos, incluirlo
+            if file_contents:
+                base_prompt += "\n\n**CONTENIDO DE LOS ARCHIVOS DEL CURSO:**\n"
+                base_prompt += "A continuación tienes el contenido extraído de los archivos del curso. Úsalo como contexto para responder las preguntas de los estudiantes.\n"
+                base_prompt += "**IMPORTANTE**: Cuando un estudiante pregunte sobre el curso (por ejemplo: '¿De qué trata este curso?', '¿Qué temas se cubren?', '¿Qué voy a aprender?'), DEBES dar un resumen completo y detallado basándote en este contenido.\n\n"
+                base_prompt += file_contents
+                base_prompt += "\n\n**INSTRUCCIONES FINALES:**\n"
+                base_prompt += "- Usa SOLO la información de estos archivos para responder.\n"
+                base_prompt += "- Para preguntas sobre el curso (resúmenes, temas, conceptos): Proporciona respuestas completas y directas basadas en el contenido de arriba.\n"
+                base_prompt += "- Para tareas y problemas: Guía al estudiante con preguntas socráticas en lugar de resolver directamente.\n"
+            else:
+                base_prompt += "\n**Usa SOLO la información de estos archivos para responder. Si la pregunta no está relacionada con estos materiales, recházala educadamente.**"
+        else:
+            base_prompt += "\n\n**⚠️ NO HAY ARCHIVOS EN EL CURSO:** Si el estudiante hace una pregunta, debes informarle que el docente aún no ha subido materiales al curso y que no puedes responder hasta que haya archivos disponibles."
+        
+        return base_prompt.format(course_title=course_title or "el curso")
 
-    def _build_messages(self, request: FeedbackRequest) -> List[dict]:
-        """Convierte tu historial a formato OpenAI Chat."""
-        messages: List[dict] = [{"role": "system", "content": self._build_system_prompt()}]
+    def _build_messages(self, request: FeedbackRequest, course_files: List[dict] = None, course_title: str = "", file_contents: str = "") -> List[dict]:
+        """Convierte tu historial a formato OpenAI Chat con contexto del curso."""
+        messages: List[dict] = [{"role": "system", "content": self._build_system_prompt(course_files, course_title, file_contents)}]
 
         # historial (últimos 10)
         for msg in request.conversationHistory[-10:]:
             if msg.role in ["user", "assistant"]:
                 messages.append({"role": msg.role, "content": msg.content})
 
-        # última respuesta del estudiante
-        messages.append({"role": "user", "content": request.studentResponse})
+        # última respuesta del estudiante (soporta tanto 'message' como 'studentResponse')
+        student_message = request.message or request.studentResponse or ""
+        if student_message:
+            messages.append({"role": "user", "content": student_message})
         return messages
 
-    async def generate_feedback(self, request: FeedbackRequest) -> FeedbackResponse:
-        """Genera feedback pedagógico usando OpenAI, misma firma que ClaudeService."""
+    async def generate_feedback(self, request: FeedbackRequest, course_files: List[dict] = None, course_title: str = "") -> FeedbackResponse:
+        """Genera feedback pedagógico usando OpenAI con contexto de archivos del curso."""
         try:
-            messages = self._build_messages(request)
+            # Detectar mal uso de IA (solo para estudiantes)
+            student_message = request.message or request.studentResponse or ""
+            is_misuse, misuse_reason = misuse_detection_service.detect_misuse(student_message)
+            
+            # Si se detecta mal uso, retornar respuesta educativa y marcar para alerta
+            if is_misuse:
+                feedback_text = misuse_detection_service.get_misuse_response()
+                
+                return FeedbackResponse(
+                    response=feedback_text,
+                    feedback=feedback_text,
+                    tokensUsed={
+                        "prompt": 0,
+                        "completion": 0,
+                        "total": 0,
+                        "assessment": {
+                            "misuse_detected": True,
+                            "misuse_reason": misuse_reason,
+                            "courseId": request.courseId,
+                            "conversationId": request.conversationId,
+                            "studentMessage": student_message
+                        }
+                    },
+                    sourcesUsed=None,
+                    suggestions=None,
+                    nextQuestion=None,
+                    assessment={
+                        "misuse_detected": True,
+                        "misuse_reason": misuse_reason,
+                        "courseId": request.courseId,
+                        "conversationId": request.conversationId,
+                        "studentMessage": student_message
+                    },
+                )
+            
+            # Verificar que haya archivos en el curso
+            if not course_files or len(course_files) == 0:
+                return FeedbackResponse(
+                    response="Lo siento, pero el docente aún no ha subido materiales al curso. No puedo responder preguntas hasta que haya archivos disponibles. Por favor, contacta al docente para que suba los materiales del curso.",
+                    feedback="Lo siento, pero el docente aún no ha subido materiales al curso. No puedo responder preguntas hasta que haya archivos disponibles. Por favor, contacta al docente para que suba los materiales del curso.",
+                    tokensUsed=None,
+                    sourcesUsed=None,
+                    suggestions=None,
+                    nextQuestion=None,
+                    assessment=None,
+                )
+            
+            # Verificar que la pregunta esté relacionada con el curso
+            if not file_service.is_course_related(student_message, course_title):
+                return FeedbackResponse(
+                    response="Lo siento, pero solo puedo responder preguntas relacionadas con el curso y los materiales del curso. Por favor, haz preguntas sobre el contenido del curso, los temas que se están estudiando, o los archivos que el docente ha compartido.",
+                    feedback="Lo siento, pero solo puedo responder preguntas relacionadas con el curso y los materiales del curso. Por favor, haz preguntas sobre el contenido del curso, los temas que se están estudiando, o los archivos que el docente ha compartido.",
+                    tokensUsed=None,
+                    sourcesUsed=None,
+                    suggestions=None,
+                    nextQuestion=None,
+                    assessment=None,
+                )
+            
+            # Extraer contenido de los archivos
+            file_contents = ""
+            if course_files:
+                print(f"Extrayendo contenido de {len(course_files)} archivos...")
+                file_contents = await file_service.extract_text_from_files(course_files, max_files=5)
+                if file_contents:
+                    print(f"Contenido extraído: {len(file_contents)} caracteres")
+                else:
+                    print("No se pudo extraer contenido de los archivos")
+            
+            # Si no hay mal uso, generar feedback normal con contexto
+            messages = self._build_messages(request, course_files, course_title, file_contents)
 
             resp = self.client.chat.completions.create(
                 model=self.model,
@@ -77,8 +191,18 @@ Tu rol es:
 
             feedback_text = resp.choices[0].message.content or "No se recibió contenido."
 
+            # Calcular tokens usados
+            tokens_used = {
+                "prompt": resp.usage.prompt_tokens if hasattr(resp, 'usage') and resp.usage else 0,
+                "completion": resp.usage.completion_tokens if hasattr(resp, 'usage') and resp.usage else 0,
+                "total": resp.usage.total_tokens if hasattr(resp, 'usage') and resp.usage else 0
+            }
+
             return FeedbackResponse(
-                feedback=feedback_text,
+                response=feedback_text,  # Frontend espera 'response'
+                feedback=feedback_text,  # Mantener para compatibilidad
+                tokensUsed=tokens_used,
+                sourcesUsed=None,
                 suggestions=None,
                 nextQuestion=None,
                 assessment=None,
@@ -86,8 +210,12 @@ Tu rol es:
 
         except Exception as e:
             print(f"Error OpenAI: {e}")
+            error_msg = "Lo siento, hubo un error al procesar tu respuesta con OpenAI. Intenta nuevamente."
             return FeedbackResponse(
-                feedback="Lo siento, hubo un error al procesar tu respuesta con OpenAI. Intenta nuevamente.",
+                response=error_msg,  # Frontend espera 'response'
+                feedback=error_msg,  # Mantener para compatibilidad
+                tokensUsed=None,
+                sourcesUsed=None,
                 suggestions=None,
                 nextQuestion=None,
                 assessment=None,

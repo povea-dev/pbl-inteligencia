@@ -6,6 +6,8 @@ export interface AppUser {
   email: string | null;
   role: UserRole;
   displayName?: string | null;
+  firstName?: string;
+  lastName?: string;
 }
 
 // ========== COURSES ==========
@@ -91,6 +93,8 @@ export interface FeedbackRequest {
   message: string;
   conversationHistory: Message[];
   idToken: string; // Firebase ID Token para auth
+  courseFiles?: Array<{ name: string; type: string; url: string }>; // Archivos del curso con URLs para extraer contenido
+  courseTitle?: string; // Título del curso
 }
 
 export interface FeedbackResponse {
@@ -100,6 +104,13 @@ export interface FeedbackResponse {
     prompt: number;
     completion: number;
     total: number;
+    assessment?: {
+      misuse_detected?: boolean;
+      misuse_reason?: string;
+      courseId?: string;
+      conversationId?: string;
+      studentMessage?: string;
+    };
   };
 }
 

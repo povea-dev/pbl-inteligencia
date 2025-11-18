@@ -1,23 +1,42 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { useChatStore } from '../../stores/chatStore';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { MessageList } from './MessageList';
 import { InputBox } from './InputBox';
-import { firebaseService } from '../../services/firebaseService';
+import { ConversationSidebar } from './ConversationSidebar';
+import { FileList } from '../teacher/FileList';
+import { conversationsService } from '../../services/conversationsService';
+import { messagesService } from '../../services/messagesService';
+import { coursesService } from '../../services/coursesService';
+import { studentsService } from '../../services/studentsService';
+import { filesService } from '../../services/filesService';
 import { apiService } from '../../services/apiService';
+import { alertsService } from '../../services/alertsService';
+import { getFirebaseIdToken } from '../../services/authService';
+import { useTheme } from '../../contexts/ThemeContext';
+import { db } from '../../config/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { Conversation, Message, Course, AppUser, CourseFile } from '../../types';
+import { ArrowLeft, BookOpen, Brain, Wifi, WifiOff, Loader2, AlertTriangle, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 
-export const ChatContainer: React.FC = () => {
-  const { 
-    messages, 
-    currentProblem, 
-    currentSession,
-    isLoading, 
-    setMessages,
-    setLoading,
-    setError 
-  } = useChatStore();
+interface ChatContainerProps {
+  user: AppUser;
+}
+
+export const ChatContainer: React.FC<ChatContainerProps> = ({ user }) => {
+  const { courseId } = useParams<{ courseId: string }>();
+  const navigate = useNavigate();
+  const { darkMode } = useTheme();
+  
+  const [course, setCourse] = useState<Course | null>(null);
+  const [courseFiles, setCourseFiles] = useState<CourseFile[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,126 +46,477 @@ export const ChatContainer: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Cargar curso y archivos
+  const loadCourse = useCallback(async () => {
+    if (!courseId) return;
+    
+    try {
+      const courseData = await coursesService.getCourseById(courseId);
+      
+      if (!courseData) {
+        navigate('/student');
+        alert('Curso no encontrado');
+        return;
+      }
+      
+      // Verificar acceso al curso
+      if (user.role === 'teacher') {
+        // Docente solo puede acceder a sus propios cursos
+        if (courseData.teacherId !== user.uid) {
+          navigate('/teacher');
+          alert('No tienes acceso a este curso');
+          return;
+        }
+      } else if (user.role === 'student') {
+        // Estudiante solo puede acceder a cursos en los que está inscrito
+        const enrollmentsRef = collection(db, 'courses', courseId, 'enrollments');
+        const enrollmentQuery = query(
+          enrollmentsRef,
+          where('studentId', '==', user.uid),
+          where('status', '==', 'active')
+        );
+        const enrollmentSnapshot = await getDocs(enrollmentQuery);
+        
+        if (enrollmentSnapshot.empty) {
+          navigate('/student');
+          alert('No tienes acceso a este curso. Contacta a tu docente para que te agregue.');
+          return;
+        }
+      }
+      
+      setCourse(courseData);
+      
+      // Cargar archivos del curso
+      const files = await filesService.getCourseFiles(courseId);
+      setCourseFiles(files);
+    } catch (error) {
+      console.error('Error cargando curso:', error);
+      navigate(user.role === 'teacher' ? '/teacher' : '/student');
+      alert('Error al cargar el curso');
+    }
+  }, [courseId, user.uid, user.role, navigate]);
+
+  // Cargar conversaciones del usuario
+  const loadConversations = useCallback(async () => {
+    if (!courseId) return;
+    
+    try {
+      const convs = await conversationsService.getUserConversations(courseId, user.uid);
+      setConversations(convs);
+      
+      // Seleccionar la más reciente si no hay una seleccionada
+      if (!currentConversation && convs.length > 0) {
+        setCurrentConversation(convs[0]);
+      }
+    } catch (error) {
+      console.error('Error cargando conversaciones:', error);
+    }
+  }, [courseId, user.uid, currentConversation]);
+
+  // Verificar backend
   useEffect(() => {
     const checkBackend = async () => {
-      const available = await apiService.healthCheck();
-      setBackendAvailable(available);
+      try {
+        const available = await apiService.healthCheck();
+        setBackendAvailable(available);
+        if (!available) {
+          console.warn('Backend no disponible. El chatbot funcionará en modo limitado.');
+        }
+      } catch (error) {
+        console.error('Error verificando backend:', error);
+        setBackendAvailable(false);
+      }
     };
     checkBackend();
+    
+    // Verificar cada 30 segundos
+    const interval = setInterval(checkBackend, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (!currentSession) return;
+    loadCourse();
+    loadConversations();
+  }, [loadCourse, loadConversations]);
 
-    const unsubscribe = firebaseService.subscribeToMessages(
-      currentSession.id,
+  // Suscribirse a mensajes en tiempo real
+  useEffect(() => {
+    if (!courseId || !currentConversation) return;
+
+    const unsubscribe = messagesService.subscribeToMessages(
+      courseId,
+      currentConversation.id,
       (newMessages) => {
         setMessages(newMessages);
       }
     );
 
     return () => unsubscribe();
-  }, [currentSession, setMessages]);
+  }, [courseId, currentConversation]);
 
-  const handleSendMessage = async (content: string) => {
-    if (!currentProblem || !currentSession || !content.trim()) return;
+  const handleNewConversation = () => {
+    setCurrentConversation(null);
+    setMessages([]);
+  };
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      await firebaseService.saveMessage({
-        sessionId: currentSession.id,
-        role: 'user',
-        content: content.trim()
-      });
-
-      await firebaseService.updateSessionActivity(currentSession.id);
-
-      if (backendAvailable) {
-        try {
-          const response = await apiService.getFeedback({
-            sessionId: currentSession.id,
-            problemId: currentProblem.id,
-            studentResponse: content.trim(),
-            conversationHistory: messages
-          });
-
-          await firebaseService.saveMessage({
-            sessionId: currentSession.id,
-            role: 'assistant',
-            content: response.feedback
-          });
-
-        } catch (apiError) {
-          await firebaseService.saveMessage({
-            sessionId: currentSession.id,
-            role: 'assistant',
-            content: 'El servicio de IA no está disponible en este momento. Tu respuesta ha sido guardada.'
-          });
-        }
-      } else {
-        await firebaseService.saveMessage({
-          sessionId: currentSession.id,
-          role: 'assistant',
-          content: 'El backend no está conectado. Tu respuesta ha sido guardada.'
-        });
-      }
-
-    } catch (error) {
-      setError('Error al enviar el mensaje. Por favor, intenta nuevamente.');
-    } finally {
-      setLoading(false);
+  const handleSelectConversation = (conversationId: string) => {
+    const conv = conversations.find(c => c.id === conversationId);
+    if (conv) {
+      setCurrentConversation(conv);
     }
   };
 
-  if (!currentProblem) {
+  const handleDeleteConversation = async (conversationId: string) => {
+    if (!courseId) return;
+    
+    try {
+      await conversationsService.deleteConversation(courseId, conversationId);
+      
+      // Actualizar lista
+      const updatedConvs = conversations.filter(c => c.id !== conversationId);
+      setConversations(updatedConvs);
+      
+      // Si era la actual, limpiar
+      if (currentConversation?.id === conversationId) {
+        setCurrentConversation(updatedConvs.length > 0 ? updatedConvs[0] : null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error eliminando conversación:', error);
+    }
+  };
+
+  const handleUpdateTitle = async (conversationId: string, newTitle: string) => {
+    if (!courseId) return;
+    
+    try {
+      await conversationsService.updateConversationTitle(courseId, conversationId, newTitle);
+      
+      // Actualizar lista
+      const updatedConvs = conversations.map(c => 
+        c.id === conversationId ? { ...c, title: newTitle } : c
+      );
+      setConversations(updatedConvs);
+      
+      // Si es la actual, actualizar también
+      if (currentConversation?.id === conversationId) {
+        setCurrentConversation({ ...currentConversation, title: newTitle });
+      }
+    } catch (error) {
+      console.error('Error actualizando título:', error);
+      alert('Error al actualizar el nombre de la conversación');
+    }
+  };
+
+  const handleSendMessage = async (content: string) => {
+    if (!courseId || !content.trim()) return;
+
+    setIsLoading(true);
+
+    try {
+      let convId = currentConversation?.id;
+
+      // Si no hay conversación actual, crear una nueva
+      if (!convId) {
+        convId = await conversationsService.createConversation(
+          courseId,
+          user.uid,
+          user.role,
+          content
+        );
+        
+        // Recargar conversaciones
+        await loadConversations();
+        
+        // Seleccionar la nueva
+        const newConv = await conversationsService.getConversationById(courseId, convId);
+        if (newConv) {
+          setCurrentConversation(newConv);
+        }
+      }
+
+      // Guardar mensaje del usuario
+      await messagesService.saveMessage(courseId, convId, 'user', content);
+
+      // Actualizar actividad
+      await conversationsService.updateLastActivity(courseId, convId);
+      await conversationsService.incrementMessageCount(courseId, convId);
+
+      // Cargar mensajes actualizados antes de enviar a la IA
+      const updatedMessages = await messagesService.getMessages(courseId, convId);
+
+      // Obtener respuesta de la IA (si backend está disponible)
+      if (backendAvailable) {
+        try {
+          const idToken = await getFirebaseIdToken();
+          
+          if (!idToken) {
+            throw new Error('No se pudo obtener token de autenticación');
+          }
+
+          // Preparar archivos para el backend (nombre, tipo y URL para extraer contenido)
+          const filesForBackend = courseFiles.map(file => ({
+            name: file.name,
+            type: file.type,
+            url: file.url
+          }));
+
+          const response = await apiService.getFeedback({
+            conversationId: convId,
+            courseId,
+            message: content,
+            conversationHistory: updatedMessages,
+            idToken,
+            courseFiles: filesForBackend,
+            courseTitle: course?.title || ''
+          });
+
+          // Verificar que la respuesta tenga contenido
+          if (!response || !response.response) {
+            throw new Error('La respuesta del backend no contiene contenido');
+          }
+
+          // Guardar respuesta de la IA
+          await messagesService.saveMessage(
+            courseId,
+            convId,
+            'assistant',
+            response.response,
+            {
+              tokens: response.tokensUsed,
+              sourcesUsed: response.sourcesUsed
+            }
+          );
+
+          // Si se detectó mal uso y el usuario es estudiante, crear alerta para el profesor
+          const assessment = response.tokensUsed?.assessment;
+          if (assessment?.misuse_detected && user.role === 'student' && course) {
+            try {
+              await alertsService.createMisuseAlert(
+                courseId,
+                convId,
+                user.uid,
+                content,
+                assessment.misuse_reason || 'Mal uso de IA detectado',
+                course.teacherId
+              );
+              console.log('Alerta de mal uso creada para el profesor');
+            } catch (alertError) {
+              console.error('Error creando alerta de mal uso:', alertError);
+              // No bloquear el flujo si falla la alerta
+            }
+          }
+
+          await conversationsService.incrementMessageCount(courseId, convId);
+
+        } catch (apiError: any) {
+          console.error('Error con la API:', apiError);
+          
+          let errorMessage = 'El servicio de IA no está disponible. Tu mensaje ha sido guardado.';
+          
+          if (apiError.response) {
+            // Error de respuesta del servidor
+            if (apiError.response.status === 401) {
+              errorMessage = 'Error de autenticación. Por favor, recarga la página.';
+            } else if (apiError.response.status === 500) {
+              errorMessage = 'Error en el servidor. Por favor, intenta más tarde.';
+            } else if (apiError.response.data?.detail) {
+              errorMessage = apiError.response.data.detail;
+            }
+          } else if (apiError.request) {
+            // Error de red
+            errorMessage = 'No se pudo conectar con el servidor. Verifica tu conexión a internet.';
+          } else if (apiError.message) {
+            errorMessage = apiError.message;
+          }
+          
+          await messagesService.saveMessage(
+            courseId,
+            convId,
+            'assistant',
+            errorMessage
+          );
+        }
+      } else {
+        await messagesService.saveMessage(
+          courseId,
+          convId,
+          'assistant',
+          'El backend no está conectado. Tu respuesta ha sido guardada.'
+        );
+      }
+
+    } catch (error) {
+      console.error('Error al enviar mensaje:', error);
+      alert('Error al enviar el mensaje');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoBack = () => {
+    if (user.role === 'teacher') {
+      navigate('/teacher');
+    } else {
+      navigate('/student');
+    }
+  };
+
+  if (!course) {
     return (
-      <div className="flex items-center justify-center h-full bg-white">
+      <div className={`min-h-screen flex items-center justify-center ${
+        darkMode 
+          ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' 
+          : 'bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50'
+      }`}>
         <div className="text-center">
-          <p className="text-gray-600">No hay problema seleccionado</p>
+          <Loader2 className={`w-12 h-12 animate-spin mx-auto mb-4 ${
+            darkMode ? 'text-emerald-400' : 'text-emerald-600'
+          }`} />
+          <p className={darkMode ? 'text-slate-300' : 'text-slate-600'}>Cargando curso...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header minimalista */}
-      <div className="border-b border-gray-200 px-6 py-4">
+    <div className={`h-screen flex flex-col ${
+      darkMode 
+        ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' 
+        : 'bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50'
+    }`}>
+      {/* Header */}
+      <div className={`border-b px-6 py-4 backdrop-blur-lg shadow-sm ${
+        darkMode 
+          ? 'border-slate-700/50 bg-slate-800/80' 
+          : 'border-slate-200/50 bg-white/80'
+      }`}>
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">PBL Chatbot</h1>
-            <p className="text-sm text-gray-600 mt-1">Asistente de Aprendizaje Basado en Problemas</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleGoBack}
+              className={`p-2 rounded-lg transition-colors ${
+                darkMode 
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-700' 
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
+                darkMode
+                  ? 'bg-gradient-to-br from-emerald-900/50 to-teal-900/50 border-emerald-700/50'
+                  : 'bg-gradient-to-br from-emerald-100 to-teal-100 border-emerald-200/50'
+              }`}>
+                <BookOpen className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+              </div>
+              <div>
+                <h1 className={`text-xl font-bold flex items-center gap-2 ${
+                  darkMode ? 'text-white' : 'text-slate-900'
+                }`}>
+                  {course.title}
+                </h1>
+                <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                  {course.description || 'Sin descripción'}
+                </p>
+              </div>
+            </div>
           </div>
+          
           {backendAvailable !== null && (
-            <div className={`text-sm px-3 py-1 rounded-full ${
-              backendAvailable ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+            <div className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full font-semibold border ${
+              backendAvailable 
+                ? darkMode
+                  ? 'bg-emerald-900/50 text-emerald-300 border-emerald-700'
+                  : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                : darkMode
+                  ? 'bg-yellow-900/50 text-yellow-300 border-yellow-700'
+                  : 'bg-yellow-100 text-yellow-700 border-yellow-200'
             }`}>
-              {backendAvailable ? 'IA Conectada' : 'Modo Local'}
+              {backendAvailable ? (
+                <>
+                  <Wifi className="w-4 h-4" />
+                  <span>IA Conectada</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-4 h-4" />
+                  <span>Sin IA</span>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Área del problema */}
-      <div className="border-b border-gray-100 bg-gray-50 px-6 py-4">
-        <h2 className="font-medium text-gray-900 mb-1">{currentProblem.title}</h2>
-        <p className="text-sm text-gray-600">{currentProblem.description}</p>
-      </div>
+      {/* Contenido principal */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar de conversaciones */}
+        <ConversationSidebar
+          conversations={conversations}
+          currentConversationId={currentConversation?.id || null}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onUpdateTitle={handleUpdateTitle}
+        />
 
-      {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} />
-        <div ref={messagesEndRef} />
+        {/* Área de chat */}
+        <div className={`flex-1 flex flex-col backdrop-blur-sm ${
+          darkMode ? 'bg-slate-800/50' : 'bg-white/50'
+        }`}>
+          {/* Sección de archivos (solo para estudiantes o si hay archivos) */}
+          {user.role === 'student' && courseFiles.length > 0 && (
+            <div className={`border-b ${
+              darkMode ? 'border-slate-700/50' : 'border-slate-200/50'
+            }`}>
+              <button
+                onClick={() => setShowFiles(!showFiles)}
+                className={`w-full px-6 py-3 flex items-center justify-between transition-colors ${
+                  darkMode
+                    ? 'hover:bg-slate-700/50'
+                    : 'hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  <span className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                    Archivos del curso ({courseFiles.length})
+                  </span>
+                </div>
+                {showFiles ? (
+                  <ChevronUp className={`w-5 h-5 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                ) : (
+                  <ChevronDown className={`w-5 h-5 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                )}
+              </button>
+              
+              {showFiles && (
+                <div className={`px-6 py-4 max-h-64 overflow-y-auto ${
+                  darkMode ? 'bg-slate-800/30' : 'bg-slate-50/50'
+                }`}>
+                  <FileList 
+                    files={courseFiles} 
+                    canDelete={false}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          
+          <div className="flex-1 overflow-y-auto">
+            <MessageList messages={messages} />
+            <div ref={messagesEndRef} />
+          </div>
+          
+          <InputBox 
+            onSend={handleSendMessage} 
+            disabled={false}
+            isLoading={isLoading}
+          />
+        </div>
       </div>
-
-      {/* Input */}
-      <InputBox 
-        onSend={handleSendMessage} 
-        disabled={!currentSession}
-        isLoading={isLoading}
-      />
     </div>
   );
 };

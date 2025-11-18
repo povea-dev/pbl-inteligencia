@@ -54,21 +54,44 @@ async def health_check():
     )
 
 
-@app.post("/api/feedback", response_model=FeedbackResponse)
+@app.post("/api/chat/feedback", response_model=FeedbackResponse)
 async def get_feedback(request: FeedbackRequest):
     """
     Genera feedback pedagógico basado en la respuesta del estudiante
+    Compatible con el frontend que envía: conversationId, courseId, message, conversationHistory, courseFiles, courseTitle
     """
     try:
-        feedback = await openai_service.generate_feedback(request)
+        # Validar que se haya enviado un mensaje
+        if not request.message and not request.studentResponse:
+            raise HTTPException(
+                status_code=400,
+                detail="Se requiere 'message' o 'studentResponse' en el request"
+            )
+        
+        # Obtener archivos y título del curso desde el request (el frontend los enviará)
+        course_files = getattr(request, 'courseFiles', None) or []
+        course_title = getattr(request, 'courseTitle', None) or ""
+        
+        feedback = await openai_service.generate_feedback(request, course_files, course_title)
         return feedback
     
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error en /api/feedback: {e}")
+        print(f"Error en /api/chat/feedback: {e}")
         raise HTTPException(
             status_code=500,
             detail="Error al generar feedback"
         )
+
+
+# Mantener endpoint antiguo para compatibilidad
+@app.post("/api/feedback", response_model=FeedbackResponse)
+async def get_feedback_legacy(request: FeedbackRequest):
+    """
+    Endpoint legacy - redirige a /api/chat/feedback
+    """
+    return await get_feedback(request)
 
 
 if __name__ == "__main__":

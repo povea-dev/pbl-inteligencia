@@ -144,6 +144,25 @@ export const conversationsService = {
   },
 
   /**
+   * Actualizar el título de una conversación
+   */
+  async updateConversationTitle(
+    courseId: string,
+    conversationId: string,
+    newTitle: string
+  ): Promise<void> {
+    try {
+      const conversationRef = doc(db, 'courses', courseId, 'conversations', conversationId);
+      await updateDoc(conversationRef, {
+        title: newTitle
+      });
+    } catch (error) {
+      console.error('Error actualizando título de conversación:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Actualizar última actividad de una conversación
    */
   async updateLastActivity(

@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { filesService } from '../../services/filesService';
 import { CourseFile } from '../../types';
+import { Upload, File, AlertCircle, Loader2 } from 'lucide-react';
 
 interface FileUploadProps {
   courseId: string;
   userId: string;
+  teacherName?: string;
   onFileUploaded: (file: CourseFile) => void;
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ 
   courseId, 
-  userId, 
+  userId,
+  teacherName,
   onFileUploaded 
 }) => {
   const [uploading, setUploading] = useState(false);
@@ -29,11 +32,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     setError(null);
 
     try {
-      const uploadedFile = await filesService.uploadFile(courseId, file, userId);
+      const uploadedFile = await filesService.uploadFile(courseId, file, userId, teacherName);
       onFileUploaded(uploadedFile);
-    } catch (err) {
-      setError('Error al subir el archivo. Intenta nuevamente.');
-      console.error(err);
+    } catch (err: any) {
+      console.error('Error al subir archivo:', err);
+      
+      // Mensajes de error más específicos
+      if (err.message?.includes('CORS')) {
+        setError('Error de CORS. Verifica que las reglas de Firebase Storage estén configuradas correctamente. Consulta firebase-storage-rules.txt');
+      } else if (err.message?.includes('permisos') || err.message?.includes('unauthorized')) {
+        setError('No tienes permisos para subir archivos. Verifica las reglas de Firebase Storage.');
+      } else if (err.message?.includes('autenticado')) {
+        setError('Debes estar autenticado para subir archivos. Por favor, inicia sesión nuevamente.');
+      } else {
+        setError(err.message || 'Error al subir el archivo. Intenta nuevamente.');
+      }
     } finally {
       setUploading(false);
     }
@@ -67,38 +80,30 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   return (
     <div className="w-full">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-10 text-center transition-all ${
           dragActive
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+            ? 'border-emerald-500 bg-emerald-50/50 shadow-lg shadow-emerald-500/20'
+            : 'border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-400'
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
       >
         {uploading ? (
-          <div className="space-y-2">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="text-sm text-gray-600">Subiendo archivo...</p>
+          <div className="space-y-3">
+            <Loader2 className="w-12 h-12 text-emerald-600 animate-spin mx-auto" />
+            <p className="text-sm font-medium text-slate-700">Subiendo archivo...</p>
+            <p className="text-xs text-slate-500">Por favor espera</p>
           </div>
         ) : (
           <>
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              stroke="currentColor"
-              fill="none"
-              viewBox="0 0 48 48"
-            >
-              <path
-                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl mb-4 border border-emerald-200/50">
+              <Upload className="w-8 h-8 text-emerald-600" />
+            </div>
             <div className="mt-4">
               <label htmlFor="file-upload" className="cursor-pointer">
-                <span className="text-blue-600 hover:text-blue-700 font-medium">
+                <span className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-semibold transition-colors">
+                  <File className="w-4 h-4" />
                   Selecciona un archivo
                 </span>
                 <input
@@ -111,9 +116,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                   disabled={uploading}
                 />
               </label>
-              <p className="text-gray-500 text-sm">o arrastra y suelta</p>
+              <p className="text-slate-500 text-sm mt-2">o arrastra y suelta aquí</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-slate-500 mt-4 flex items-center justify-center gap-1">
+              <File className="w-3 h-3" />
               PDF, DOCX o TXT hasta 10MB
             </p>
           </>
@@ -121,8 +127,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       </div>
 
       {error && (
-        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-800">{error}</p>
+        <div className="mt-4 bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-800 font-medium">{error}</p>
         </div>
       )}
     </div>

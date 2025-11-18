@@ -1,91 +1,125 @@
-import { JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
+import { getCurrentUserWithRole, logout } from "./services/authService";
 
-// Componentes principales
-import Login from "./components/auth/login";
-import TeacherHome from "./components/teacher/TeacherHome";
-import StudentHome from "./components/student/StudentHome";
+// Componentes
+import Login from "./components/auth/Login";
+import { TeacherHome } from "./components/teacher/TeacherHome";
+import { StudentHome } from "./components/student/StudentHome";
+import { ChatContainer } from "./components/chat/ChatContainer";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
-
-// Tipos
 import type { AppUser } from "./types";
-
-function Protected({
-  allow,
-  user,
-  children,
-}: {
-  allow: Array<"teacher" | "student">;
-  user: AppUser | null | undefined;
-  children: JSX.Element;
-}) {
-  if (user === undefined)
-    return <div className="h-screen grid place-items-center">Cargando…</div>;
-  if (user === null) return <Navigate to="/login" replace />;
-  if (!allow.includes(user.role)) return <Navigate to="/" replace />;
-  return children;
-}
+import { ThemeProvider } from "./contexts/ThemeContext";
 
 export default function App() {
   const [user, setUser] = useState<AppUser | null | undefined>(undefined);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
         setUser(null);
         return;
       }
 
-      // ⚠️ Por ahora asumimos que todos son "student"
-      // Más adelante lo cargamos desde Firestore (/users/{uid})
-      setUser({ uid: u.uid, email: u.email, role: "student" });
+      const appUser = await getCurrentUserWithRole(firebaseUser);
+      setUser(appUser);
     });
+    
     return () => unsub();
   }, []);
 
-  return (
-    <Routes>
-      {/* Página de inicio de sesión */}
-      <Route path="/login" element={<Login />} />
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setUser(null);
+    } catch (error) {
+      console.error('Error cerrando sesión:', error);
+    }
+  };
 
-      {/* Dashboard docente */}
+  if (user === undefined) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ThemeProvider>
+      <Routes>
+      <Route 
+        path="/login" 
+        element={
+          user ? (
+            <Navigate to={user.role === 'teacher' ? '/teacher' : '/student'} replace />
+          ) : (
+            <Login />
+          )
+        } 
+      />
+
       <Route
         path="/teacher"
         element={
-          <Protected allow={["teacher"]} user={user}>
-            <TeacherHome user={user as AppUser} />
-          </Protected>
+          <ProtectedRoute user={user} requiredRole="teacher">
+            <TeacherHome user={user as AppUser} onLogout={handleLogout} />
+          </ProtectedRoute>
         }
       />
 
-      {/* Dashboard estudiante */}
       <Route
         path="/student"
         element={
-          <Protected allow={["student"]} user={user}>
-            <StudentHome user={user as AppUser} />
-          </Protected>
+          <ProtectedRoute user={user} requiredRole="student">
+            <StudentHome user={user as AppUser} onLogout={handleLogout} />
+          </ProtectedRoute>
         }
       />
 
-      {/* Chat por curso */}
-     
+      <Route
+        path="/course/:courseId/chat"
+        element={
+          <ProtectedRoute user={user}>
+            <ChatContainer user={user as AppUser} />
+          </ProtectedRoute>
+        }
+      />
 
-      {/* Redirección según rol o login */}
+      <Route
+        path="/"
+        element={
+          user ? (
+            <Navigate 
+              to={user.role === 'teacher' ? '/teacher' : '/student'} 
+              replace 
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+
       <Route
         path="*"
         element={
-          user?.role === "teacher" ? (
-            <Navigate to="/teacher" replace />
-          ) : user?.role === "student" ? (
-            <Navigate to="/student" replace />
+          user ? (
+            <Navigate 
+              to={user.role === 'teacher' ? '/teacher' : '/student'} 
+              replace 
+            />
           ) : (
             <Navigate to="/login" replace />
           )
         }
       />
     </Routes>
+    </ThemeProvider>
   );
 }

@@ -5,7 +5,9 @@ import {
   where,
   Timestamp,
   orderBy,
-  limit
+  limit,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { StudentActivity, FrequentQuestion } from '../types';
@@ -22,6 +24,7 @@ export const analyticsService = {
       
       // Agrupar por estudiante
       const activityMap = new Map<string, StudentActivity>();
+      const studentIds = new Set<string>();
       
       for (const convDoc of conversationsSnapshot.docs) {
         const conv = convDoc.data();
@@ -30,6 +33,7 @@ export const analyticsService = {
         if (conv.userRole !== 'student') continue;
         
         const studentId = conv.userId;
+        studentIds.add(studentId);
         
         if (!activityMap.has(studentId)) {
           activityMap.set(studentId, {
@@ -52,11 +56,85 @@ export const analyticsService = {
         }
       }
       
+      // Obtener información de los estudiantes desde Firestore
+      const studentInfoPromises = Array.from(studentIds).map(async (studentId) => {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', studentId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            return {
+              studentId,
+              email: userData.email || 'Sin email',
+              displayName: userData.displayName || userData.firstName && userData.lastName 
+                ? `${userData.firstName} ${userData.lastName}`.trim()
+                : userData.email || 'Estudiante'
+            };
+          }
+          return { studentId, email: 'Usuario no encontrado', displayName: 'Usuario no encontrado' };
+        } catch (error) {
+          console.error(`Error obteniendo info del estudiante ${studentId}:`, error);
+          return { studentId, email: 'Error al cargar', displayName: 'Error al cargar' };
+        }
+      });
+      
+      const studentInfos = await Promise.all(studentInfoPromises);
+      
+      // Actualizar emails y nombres
+      studentInfos.forEach(({ studentId, email, displayName }) => {
+        const activity = activityMap.get(studentId);
+        if (activity) {
+          activity.studentEmail = displayName || email;
+        }
+      });
+      
       return Array.from(activityMap.values());
     } catch (error) {
       console.error('Error obteniendo actividad de estudiantes:', error);
       throw error;
     }
+  },
+
+  /**
+   * Normalizar pregunta para comparación (lowercase, trim, quitar signos de puntuación)
+   */
+  normalizeQuestion(question: string): string {
+    return question
+      .toLowerCase()
+      .trim()
+      .replace(/[¿?¡!.,;:]/g, '') // Quitar signos de puntuación
+      .replace(/\s+/g, ' ') // Normalizar espacios
+      .slice(0, 200); // Limitar longitud
+  },
+
+  /**
+   * Comparar si dos preguntas son similares
+   */
+  areQuestionsSimilar(q1: string, q2: string): boolean {
+    const normalized1 = this.normalizeQuestion(q1);
+    const normalized2 = this.normalizeQuestion(q2);
+    
+    // Si son exactamente iguales después de normalizar
+    if (normalized1 === normalized2) return true;
+    
+    // Si una contiene a la otra (para variaciones menores)
+    if (normalized1.length > 10 && normalized2.length > 10) {
+      if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
+        return true;
+      }
+    }
+    
+    // Calcular similitud simple (palabras en común)
+    const words1 = new Set(normalized1.split(' ').filter(w => w.length > 2));
+    const words2 = new Set(normalized2.split(' ').filter(w => w.length > 2));
+    
+    if (words1.size === 0 || words2.size === 0) return false;
+    
+    const intersection = new Set([...words1].filter(w => words2.has(w)));
+    const union = new Set([...words1, ...words2]);
+    
+    // Si más del 70% de las palabras coinciden, son similares
+    const similarity = intersection.size / union.size;
+    return similarity > 0.7;
   },
 
   /**
@@ -69,37 +147,92 @@ export const analyticsService = {
         collection(db, 'courses', courseId, 'conversations')
       );
       
-      const questions: FrequentQuestion[] = [];
+      const questionMap = new Map<string, FrequentQuestion>();
       
-      for (const convDoc of conversationsSnapshot.docs) {
+      // Obtener el primer mensaje de cada conversación
+      const messagePromises = conversationsSnapshot.docs.map(async (convDoc) => {
         const conv = convDoc.data();
         
-        // Obtener el primer mensaje de cada conversación (pregunta inicial)
-        const messagesSnapshot = await getDocs(
-          query(
-            collection(db, 'courses', courseId, 'conversations', convDoc.id, 'messages'),
-            where('role', '==', 'user'),
-            orderBy('timestamp', 'asc'),
-            limit(1)
-          )
-        );
-        
-        if (!messagesSnapshot.empty) {
-          const firstMessage = messagesSnapshot.docs[0].data();
+        try {
+          const messagesSnapshot = await getDocs(
+            query(
+              collection(db, 'courses', courseId, 'conversations', convDoc.id, 'messages'),
+              where('role', '==', 'user'),
+              orderBy('timestamp', 'asc'),
+              limit(1)
+            )
+          );
           
-          questions.push({
-            id: convDoc.id,
-            question: firstMessage.content.slice(0, 100), // Primeros 100 caracteres
+          if (!messagesSnapshot.empty) {
+            const firstMessage = messagesSnapshot.docs[0].data();
+            const questionText = firstMessage.content.trim();
+            
+            if (questionText) {
+              return {
+                questionText,
+                lastAsked: (conv.lastMessageAt as Timestamp)?.toDate() || new Date(),
+                askedBy: conv.userId
+              };
+            }
+          }
+        } catch (error) {
+          console.error(`Error obteniendo mensajes de conversación ${convDoc.id}:`, error);
+        }
+        
+        return null;
+      });
+      
+      const questions = (await Promise.all(messagePromises)).filter(q => q !== null) as Array<{
+        questionText: string;
+        lastAsked: Date;
+        askedBy: string;
+      }>;
+      
+      // Agrupar preguntas similares
+      for (const q of questions) {
+        let foundSimilar = false;
+        let existingKey: string | null = null;
+        
+        // Buscar si ya existe una pregunta similar
+        for (const [key, existingQ] of questionMap.entries()) {
+          if (this.areQuestionsSimilar(q.questionText, existingQ.question)) {
+            // Agrupar con la pregunta existente
+            existingQ.count++;
+            existingQ.askedBy.push(q.askedBy);
+            if (q.lastAsked > existingQ.lastAsked) {
+              existingQ.lastAsked = q.lastAsked;
+            }
+            foundSimilar = true;
+            existingKey = key;
+            break;
+          }
+        }
+        
+        // Si no se encontró una similar, crear nueva entrada
+        if (!foundSimilar) {
+          const normalizedKey = this.normalizeQuestion(q.questionText);
+          // Usar el texto original como ID único, pero normalizado como clave
+          questionMap.set(normalizedKey, {
+            id: `q_${Date.now()}_${Math.random()}`, // ID único
+            question: q.questionText, // Mantener el texto original
             count: 1,
-            lastAsked: (conv.lastMessageAt as Timestamp)?.toDate() || new Date(),
-            askedBy: [conv.userId]
+            lastAsked: q.lastAsked,
+            askedBy: [q.askedBy]
           });
         }
       }
       
-      // Agrupar preguntas similares (simplificado)
-      // En producción, usarías embeddings o NLP para agrupar mejor
-      return questions.slice(0, 10); // Top 10
+      // Ordenar por frecuencia (count) y luego por última vez preguntada
+      const sortedQuestions = Array.from(questionMap.values())
+        .sort((a, b) => {
+          if (b.count !== a.count) {
+            return b.count - a.count; // Más frecuentes primero
+          }
+          return b.lastAsked.getTime() - a.lastAsked.getTime(); // Más recientes primero
+        })
+        .slice(0, 10); // Top 10
+      
+      return sortedQuestions;
     } catch (error) {
       console.error('Error obteniendo preguntas frecuentes:', error);
       throw error;

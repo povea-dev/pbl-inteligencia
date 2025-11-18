@@ -12,13 +12,17 @@ import {
 } from "firebase/firestore";
 import type { AppUser, UserRole } from "../types";
 
-export async function register(email: string, password: string, role: UserRole) {
+export async function register(email: string, password: string, role: UserRole, firstName: string, lastName: string) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   const ref = doc(db, "users", cred.user.uid);
+  const fullName = `${firstName} ${lastName}`;
   await setDoc(ref, {
     uid: cred.user.uid,
     email,
     role,
+    firstName,
+    lastName,
+    displayName: fullName,
     createdAt: serverTimestamp(),
   }, { merge: true });
   return cred.user;
@@ -36,8 +40,16 @@ export async function logout() {
 export async function getCurrentUserWithRole(u: User | null): Promise<AppUser | null> {
   if (!u) return null;
   const snap = await getDoc(doc(db, "users", u.uid));
-  const role = (snap.exists() ? snap.data()?.role : "student") as UserRole;
-  return { uid: u.uid, email: u.email, role, displayName: u.displayName ?? undefined };
+  const userData = snap.exists() ? snap.data() : {};
+  const role = (userData?.role || "student") as UserRole;
+  return { 
+    uid: u.uid, 
+    email: u.email, 
+    role, 
+    displayName: userData?.displayName || u.displayName || undefined,
+    firstName: userData?.firstName,
+    lastName: userData?.lastName
+  };
 }
 
 export function onAuth(cb: (u: User | null) => void) {
