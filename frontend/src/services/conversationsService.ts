@@ -10,10 +10,11 @@ import {
   deleteDoc,
   serverTimestamp,
   Timestamp,
-  getDoc
+  getDoc,
+  limit
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { Conversation, UserRole } from '../types';
+import { Conversation, UserRole, SearchResult } from '../types';
 
 export const conversationsService = {
   /**
@@ -273,6 +274,137 @@ export const conversationsService = {
       });
     } catch (error) {
       console.error('Error archivando conversación:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Buscar en conversaciones y mensajes
+   */
+  async searchConversations(
+    courseId: string,
+    userId: string | null, // null para buscar todas (docente)
+    searchQuery: string,
+    options?: {
+      limit?: number;
+      searchInMessages?: boolean;
+    }
+  ): Promise<SearchResult[]> {
+    try {
+      const queryLower = searchQuery.toLowerCase().trim();
+      if (!queryLower) return [];
+
+      const maxResults = options?.limit || 50;
+      const searchInMessages = options?.searchInMessages !== false;
+
+      // Obtener conversaciones
+      let conversationsQuery;
+      if (userId) {
+        conversationsQuery = query(
+          collection(db, 'courses', courseId, 'conversations'),
+          where('userId', '==', userId),
+          where('status', '==', 'active'),
+          orderBy('lastMessageAt', 'desc')
+        );
+      } else {
+        // Para docente, obtener todas las conversaciones activas
+        conversationsQuery = query(
+          collection(db, 'courses', courseId, 'conversations'),
+          where('status', '==', 'active'),
+          orderBy('lastMessageAt', 'desc')
+        );
+      }
+
+      const conversationsSnapshot = await getDocs(conversationsQuery);
+      const results: SearchResult[] = [];
+
+      // Buscar en cada conversación
+      for (const convDoc of conversationsSnapshot.docs) {
+        const convData = convDoc.data();
+        const conversation: Conversation = {
+          id: convDoc.id,
+          courseId,
+          userId: convData.userId,
+          userRole: convData.userRole,
+          title: convData.title,
+          createdAt: (convData.createdAt as Timestamp)?.toDate() || new Date(),
+          lastMessageAt: (convData.lastMessageAt as Timestamp)?.toDate() || new Date(),
+          messageCount: convData.messageCount || 0,
+          status: convData.status
+        };
+
+        const matches: SearchResult['matches'] = [];
+        let relevanceScore = 0;
+
+        // Buscar en título
+        const titleLower = conversation.title.toLowerCase();
+        if (titleLower.includes(queryLower)) {
+          const index = titleLower.indexOf(queryLower);
+          const start = Math.max(0, index - 20);
+          const end = Math.min(conversation.title.length, index + queryLower.length + 20);
+          const snippet = (start > 0 ? '...' : '') + 
+                         conversation.title.substring(start, end) + 
+                         (end < conversation.title.length ? '...' : '');
+          
+          matches.push({
+            type: 'title',
+            content: conversation.title,
+            snippet
+          });
+          relevanceScore += 0.5; // Título tiene más peso
+        }
+
+        // Buscar en mensajes si está habilitado
+        if (searchInMessages) {
+          try {
+            const messagesQuery = query(
+              collection(db, 'courses', courseId, 'conversations', conversation.id, 'messages'),
+              orderBy('timestamp', 'desc'),
+              limit(100) // Limitar búsqueda a últimos 100 mensajes por rendimiento
+            );
+            const messagesSnapshot = await getDocs(messagesQuery);
+
+            for (const msgDoc of messagesSnapshot.docs) {
+              const msgData = msgDoc.data();
+              const content = msgData.content || '';
+              const contentLower = content.toLowerCase();
+
+              if (contentLower.includes(queryLower)) {
+                const index = contentLower.indexOf(queryLower);
+                const start = Math.max(0, index - 50);
+                const end = Math.min(content.length, index + queryLower.length + 50);
+                const snippet = (start > 0 ? '...' : '') + 
+                               content.substring(start, end) + 
+                               (end < content.length ? '...' : '');
+
+                matches.push({
+                  type: 'message',
+                  content: content.substring(0, 200), // Limitar contenido
+                  snippet
+                });
+                relevanceScore += 0.1; // Cada mensaje tiene menos peso
+              }
+            }
+          } catch (error) {
+            console.warn('Error buscando en mensajes:', error);
+          }
+        }
+
+        // Solo agregar si hay coincidencias
+        if (matches.length > 0) {
+          results.push({
+            conversation,
+            matches,
+            relevanceScore: Math.min(1, relevanceScore) // Normalizar a 0-1
+          });
+        }
+      }
+
+      // Ordenar por relevancia y limitar resultados
+      results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      return results.slice(0, maxResults);
+    } catch (error) {
+      console.error('Error buscando conversaciones:', error);
       throw error;
     }
   }

@@ -6,9 +6,11 @@ import { studentsService, Student } from '../../services/studentsService';
 import { Course, CourseFile, AppUser } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SettingsModal } from '../common/SettingsModal';
+import { OnboardingTutorial } from '../common/OnboardingTutorial';
 import { FileUpload } from './FileUpload';
 import { FileList } from './FileList';
 import { Analytics } from './Analytics';
+import { markTutorialAsSeen } from '../../services/authService';
 import { 
   LogOut, 
   BookOpen, 
@@ -26,7 +28,9 @@ import {
   Loader2,
   Trash2,
   Settings,
-  Circle
+  Circle,
+  Moon,
+  Sun
 } from 'lucide-react';
 
 interface TeacherHomeProps {
@@ -43,6 +47,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [currentUser, setCurrentUser] = useState<AppUser>(user);
   
   // Modal de crear curso
@@ -70,6 +75,23 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
       setLoading(false);
     }
   }, [user.uid]);
+
+  // Mostrar tutorial si es la primera vez
+  useEffect(() => {
+    if (!currentUser.hasSeenTutorial) {
+      setShowTutorial(true);
+    }
+  }, [currentUser.hasSeenTutorial]);
+
+  const handleTutorialClose = async () => {
+    setShowTutorial(false);
+    try {
+      await markTutorialAsSeen(currentUser.uid);
+      setCurrentUser({ ...currentUser, hasSeenTutorial: true });
+    } catch (error) {
+      console.error('Error marcando tutorial como visto:', error);
+    }
+  };
 
   const loadFiles = useCallback(async () => {
     if (!selectedCourse) {
@@ -224,13 +246,13 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
       <div className={`min-h-screen flex items-center justify-center ${
         darkMode 
           ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' 
-          : 'bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50'
+          : 'bg-gradient-to-br from-slate-50 via-red-50 to-slate-100'
       }`}>
         <div className="text-center">
           <div className={`animate-spin rounded-full h-12 w-12 border-2 mx-auto mb-4 ${
             darkMode 
-              ? 'border-emerald-800 border-t-emerald-400' 
-              : 'border-emerald-200 border-t-emerald-600'
+              ? 'border-red-800 border-t-red-400' 
+              : 'border-red-200 border-t-red-600'
           }`}></div>
           <p className={darkMode ? 'text-slate-300' : 'text-slate-600'}>Cargando...</p>
         </div>
@@ -242,7 +264,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
     <div className={`min-h-screen ${
       darkMode 
         ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' 
-        : 'bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50'
+        : 'bg-gradient-to-br from-slate-50 via-red-50 to-slate-100'
     }`}>
       {/* Header */}
       <header className={`backdrop-blur-lg border-b shadow-sm sticky top-0 z-40 ${
@@ -250,18 +272,18 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
           ? 'bg-slate-800/80 border-slate-700/50' 
           : 'bg-white/80 border-slate-200/50'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                <Brain className="w-6 h-6 text-white" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-red-600 to-slate-700 rounded-xl flex items-center justify-center shadow-lg shadow-red-500/25 flex-shrink-0">
+                <Brain className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
               </div>
-              <div>
-                <h1 className={`text-2xl font-bold flex items-center gap-2 ${
+              <div className="min-w-0 flex-1">
+                <h1 className={`text-lg sm:text-2xl font-bold flex items-center gap-2 ${
                   darkMode ? 'text-white' : 'text-slate-900'
                 }`}>
-                  Panel de Docente
-                  <GraduationCap className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  <span className="truncate">Panel de Docente</span>
+                  <GraduationCap className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
                 </h1>
                 <p className={`text-sm mt-0.5 flex items-center gap-2 ${
                   darkMode ? 'text-slate-300' : 'text-slate-600'
@@ -275,15 +297,15 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                   <Circle className={`w-1 h-1 fill-current ${darkMode ? 'text-slate-500' : 'text-slate-400'}`} />
                   <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
                     darkMode 
-                      ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-700' 
-                      : 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-red-900/50 text-red-300 border border-red-700' 
+                      : 'bg-red-100 text-red-700'
                   }`}>
                     Profesor
                   </span>
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => setShowSettings(true)}
                 className={`p-2 rounded-lg transition-colors ${
@@ -296,15 +318,30 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                 <Settings className="w-5 h-5" />
               </button>
               <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-lg transition-colors ${
+                  darkMode 
+                    ? 'text-slate-300 hover:text-white hover:bg-slate-700' 
+                    : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+                title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+              >
+                {darkMode ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+              </button>
+              <button
                 onClick={onLogout}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-colors ${
                   darkMode 
                     ? 'text-slate-300 hover:text-white hover:bg-slate-700' 
                     : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <LogOut className="w-4 h-4" />
-                Cerrar sesión
+                <span className="hidden sm:inline">Cerrar sesión</span>
               </button>
             </div>
           </div>
@@ -317,18 +354,26 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         onUserUpdate={setCurrentUser}
+        onShowTutorial={() => setShowTutorial(true)}
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Tutorial de Bienvenida */}
+      <OnboardingTutorial
+        role="teacher"
+        isOpen={showTutorial}
+        onClose={handleTutorialClose}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {courses.length === 0 ? (
           // Sin cursos - Mostrar crear
           <div className="text-center py-16">
             <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6 border shadow-sm ${
               darkMode 
-                ? 'bg-gradient-to-br from-emerald-900/50 to-teal-900/50 border-emerald-700/50' 
-                : 'bg-gradient-to-br from-emerald-100 to-teal-100 border-emerald-200/50'
+                ? 'bg-gradient-to-br from-red-900/50 to-slate-900/50 border-red-700/50' 
+                : 'bg-gradient-to-br from-red-100 to-slate-100 border-red-200/50'
             }`}>
-              <BookOpen className={`w-10 h-10 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+              <BookOpen className={`w-10 h-10 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
             </div>
             <h2 className={`text-2xl font-bold mb-3 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
               No tienes cursos creados
@@ -338,31 +383,31 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-emerald-600 hover:to-teal-700 font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all transform hover:scale-105"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-red-600 to-slate-700 text-white px-6 py-3 rounded-xl hover:from-red-600 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all transform hover:scale-105"
             >
               <Plus className="w-5 h-5" />
               Crear curso
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
             {/* Sidebar - Lista de cursos */}
             <div className="lg:col-span-1">
-              <div className={`backdrop-blur-lg rounded-2xl border shadow-lg p-5 sticky top-24 ${
+              <div className={`backdrop-blur-lg rounded-xl sm:rounded-2xl border shadow-lg p-4 sm:p-5 sticky top-20 sm:top-24 ${
                 darkMode 
                   ? 'bg-slate-800/80 border-slate-700/50' 
                   : 'bg-white/80 border-slate-200/50'
               }`}>
-                <div className="mb-5">
-                  <h2 className={`text-lg font-bold flex items-center gap-2 mb-4 ${
+                <div className="mb-4 sm:mb-5">
+                  <h2 className={`text-base sm:text-lg font-bold flex items-center gap-2 mb-3 sm:mb-4 ${
                     darkMode ? 'text-white' : 'text-slate-900'
                   }`}>
-                    <BookOpen className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                    <BookOpen className={`w-4 h-4 sm:w-5 sm:h-5 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
                     Mis cursos
                   </h2>
                   <button
                     onClick={() => setShowCreateModal(true)}
-                    className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-3 rounded-xl hover:from-emerald-600 hover:to-teal-700 font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all transform hover:scale-105"
+                    className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-slate-700 text-white px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl hover:from-red-700 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all transform hover:scale-105 text-sm sm:text-base"
                   >
                     <Plus className="w-5 h-5" />
                     Crear nuevo curso
@@ -376,8 +421,8 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                       className={`group relative w-full rounded-xl transition-all ${
                         selectedCourse?.id === course.id
                           ? darkMode
-                            ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/30 border-2 border-emerald-500 shadow-md shadow-emerald-500/20'
-                            : 'bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-500 shadow-md shadow-emerald-500/20'
+                            ? 'bg-gradient-to-r from-red-900/30 to-slate-900/30 border-2 border-red-500 shadow-md shadow-red-500/20'
+                            : 'bg-gradient-to-r from-red-50 to-slate-50 border-2 border-red-500 shadow-md shadow-red-500/20'
                           : darkMode
                             ? 'bg-slate-700/50 hover:bg-slate-700 border-2 border-transparent hover:border-slate-600'
                             : 'bg-slate-50 hover:bg-slate-100 border-2 border-transparent hover:border-slate-200'
@@ -426,25 +471,25 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
               {selectedCourse ? (
                 <div className="space-y-6">
                   {/* Header del curso */}
-                  <div className={`backdrop-blur-lg rounded-2xl border shadow-lg p-6 ${
+                  <div className={`backdrop-blur-lg rounded-xl sm:rounded-2xl border shadow-lg p-4 sm:p-6 ${
                     darkMode 
                       ? 'bg-slate-800/80 border-slate-700/50' 
                       : 'bg-white/80 border-slate-200/50'
                   }`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <h2 className={`text-2xl font-bold mb-2 ${
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h2 className={`text-xl sm:text-2xl font-bold mb-1 sm:mb-2 truncate ${
                           darkMode ? 'text-white' : 'text-slate-900'
                         }`}>
                           {selectedCourse.title}
                         </h2>
-                        <p className={darkMode ? 'text-slate-300' : 'text-slate-600'}>
+                        <p className={`text-sm sm:text-base truncate ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
                           {selectedCourse.description || 'Sin descripción'}
                         </p>
                       </div>
                       <button
                         onClick={handleGoToChat}
-                        className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-emerald-600 hover:to-teal-700 font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all transform hover:scale-105 whitespace-nowrap"
+                        className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-slate-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:from-red-700 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all transform hover:scale-105 whitespace-nowrap text-sm sm:text-base"
                       >
                         <MessageSquare className="w-5 h-5" />
                         Ir al chatbot
@@ -458,27 +503,27 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                     <Analytics courseId={selectedCourse.id} />
 
                     {/* Estudiantes del curso */}
-                    <div className={`backdrop-blur-lg rounded-2xl border shadow-lg p-6 ${
+                    <div className={`backdrop-blur-lg rounded-xl sm:rounded-2xl border shadow-lg p-4 sm:p-6 ${
                       darkMode 
                         ? 'bg-slate-800/80 border-slate-700/50' 
                         : 'bg-white/80 border-slate-200/50'
                     }`}>
-                      <h3 className={`text-xl font-bold mb-6 flex items-center gap-2 ${
+                      <h3 className={`text-lg sm:text-xl font-bold mb-4 sm:mb-6 flex items-center gap-2 ${
                         darkMode ? 'text-white' : 'text-slate-900'
                       }`}>
-                        <Users className={`w-6 h-6 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                        <Users className={`w-5 h-5 sm:w-6 sm:h-6 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
                         Estudiantes del curso
                       </h3>
                       
-                      <div className="space-y-6">
+                      <div className="space-y-4 sm:space-y-6">
                         {/* Agregar estudiante */}
                         <div>
-                          <h4 className={`text-lg font-semibold mb-4 ${
+                          <h4 className={`text-base sm:text-lg font-semibold mb-3 sm:mb-4 ${
                             darkMode ? 'text-white' : 'text-slate-900'
                           }`}>
                             Agregar estudiante
                           </h4>
-                          <div className="flex gap-3">
+                          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                             <div className="flex-1 relative">
                               <Mail className={`w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 ${
                                 darkMode ? 'text-slate-500' : 'text-slate-400'
@@ -491,7 +536,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                                   setStudentError(null);
                                 }}
                                 placeholder="correo@ejemplo.com"
-                                className={`w-full pl-12 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
+                                className={`w-full pl-12 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all ${
                                   darkMode
                                     ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
                                     : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
@@ -507,7 +552,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                             <button
                               onClick={handleAddStudent}
                               disabled={addingStudent || !studentEmail.trim()}
-                              className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-emerald-600 hover:to-teal-700 font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-slate-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:from-red-700 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
                             >
                               {addingStudent ? (
                                 <>
@@ -568,17 +613,17 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                                   key={student.id}
                                   className={`flex items-center justify-between p-4 border-2 rounded-xl transition-all ${
                                     darkMode
-                                      ? 'bg-slate-700/50 border-slate-600 hover:border-emerald-600/50 hover:shadow-md'
-                                      : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'
+                                      ? 'bg-slate-700/50 border-slate-600 hover:border-red-600/50 hover:shadow-md'
+                                      : 'bg-white border-slate-200 hover:border-red-300 hover:shadow-md'
                                   }`}
                                 >
                                   <div className="flex items-center gap-4">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
                                       darkMode
-                                        ? 'bg-gradient-to-br from-emerald-900/50 to-teal-900/50 border-emerald-700'
-                                        : 'bg-gradient-to-br from-emerald-100 to-teal-100 border-emerald-200'
+                                        ? 'bg-gradient-to-br from-red-900/50 to-slate-900/50 border-red-700'
+                                        : 'bg-gradient-to-br from-red-100 to-slate-100 border-red-200'
                                     }`}>
-                                      <User className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                                      <User className={`w-5 h-5 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
                                     </div>
                                     <div>
                                       <p className={`text-sm font-semibold ${
@@ -603,19 +648,79 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                     </div>
 
                     {/* Archivos del curso */}
-                    <div className={`backdrop-blur-lg rounded-2xl border shadow-lg p-6 ${
+                    <div className={`backdrop-blur-lg rounded-xl sm:rounded-2xl border shadow-lg p-4 sm:p-6 ${
                       darkMode 
                         ? 'bg-slate-800/80 border-slate-700/50' 
                         : 'bg-white/80 border-slate-200/50'
                     }`}>
-                      <h3 className={`text-xl font-bold mb-6 flex items-center gap-2 ${
+                      <h3 className={`text-lg sm:text-xl font-bold mb-4 sm:mb-6 flex items-center gap-2 ${
                         darkMode ? 'text-white' : 'text-slate-900'
                       }`}>
-                        <FileText className={`w-6 h-6 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                        <FileText className={`w-5 h-5 sm:w-6 sm:h-6 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
                         Archivos del curso
                       </h3>
                       
                       <div className="space-y-6">
+                        {/* Configuración de procesamiento de archivos */}
+                        <div className={`p-4 rounded-xl border-2 ${
+                          darkMode 
+                            ? 'bg-slate-700/50 border-slate-600' 
+                            : 'bg-red-50/50 border-red-200'
+                        }`}>
+                          <h4 className={`text-base font-semibold mb-3 flex items-center gap-2 ${
+                            darkMode ? 'text-white' : 'text-slate-900'
+                          }`}>
+                            <FileText className={`w-5 h-5 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
+                            Configuración de procesamiento
+                          </h4>
+                          <div className="space-y-3">
+                            <div>
+                              <label className={`block text-sm font-medium mb-2 ${
+                                darkMode ? 'text-slate-300' : 'text-slate-700'
+                              }`}>
+                                Máximo de páginas por archivo PDF
+                              </label>
+                              <input
+                                type="number"
+                                min="5"
+                                max="50"
+                                value={selectedCourse.maxPagesPerFile || 10}
+                                onChange={async (e) => {
+                                  const value = parseInt(e.target.value) || 10;
+                                  if (value >= 5 && value <= 50) {
+                                    try {
+                                      await coursesService.updateCourse(selectedCourse.id, {
+                                        maxPagesPerFile: value
+                                      });
+                                      setSelectedCourse({ ...selectedCourse, maxPagesPerFile: value });
+                                    } catch (error) {
+                                      console.error('Error actualizando configuración:', error);
+                                      alert('Error al actualizar la configuración');
+                                    }
+                                  }
+                                }}
+                                className={`w-full px-3 py-2 rounded-lg border-2 text-sm ${
+                                  darkMode
+                                    ? 'bg-slate-700 border-slate-600 text-white'
+                                    : 'bg-white border-slate-200 text-slate-900'
+                                } focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600`}
+                              />
+                              <p className={`text-xs mt-2 flex items-start gap-2 ${
+                                darkMode ? 'text-slate-400' : 'text-slate-600'
+                              }`}>
+                                <AlertCircle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                                  darkMode ? 'text-yellow-400' : 'text-yellow-600'
+                                }`} />
+                                <span>
+                                  <strong>Nota:</strong> Más páginas = respuestas más completas pero más lentas. 
+                                  Recomendado: 10-15 páginas para equilibrio entre velocidad y contenido. 
+                                  Más de 20 páginas puede hacer que la IA tarde más de 1 minuto en responder.
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
                         <div>
                           <h4 className={`text-lg font-semibold mb-4 ${
                             darkMode ? 'text-white' : 'text-slate-900'
@@ -647,8 +752,8 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                 </div>
               ) : (
                 <div className="bg-white/80 backdrop-blur-lg rounded-2xl border border-slate-200/50 shadow-lg p-12 text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl mb-4 border border-emerald-200/50">
-                    <BookOpen className="w-8 h-8 text-emerald-600" />
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-100 to-slate-100 rounded-2xl mb-4 border border-red-200/50">
+                    <BookOpen className="w-8 h-8 text-red-600" />
                   </div>
                   <h3 className="text-xl font-bold text-slate-900 mb-2">
                     Selecciona un curso
@@ -670,12 +775,12 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
           onClick={() => setShowCreateModal(false)}
         >
           <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 animate-fade-in-up"
+            className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-md w-full mx-2 sm:mx-4 animate-fade-in-up max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-red-50 to-slate-50">
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-emerald-600" />
+                <Plus className="w-5 h-5 text-red-600" />
                 Crear nuevo curso
               </h2>
               <button
@@ -686,7 +791,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
               </button>
             </div>
             
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Título del curso *
@@ -695,7 +800,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                   type="text"
                   value={newCourseTitle}
                   onChange={(e) => setNewCourseTitle(e.target.value)}
-                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all"
                   placeholder="Ej: Algoritmos Avanzados"
                 />
               </div>
@@ -708,13 +813,13 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                   value={newCourseDescription}
                   onChange={(e) => setNewCourseDescription(e.target.value)}
                   rows={4}
-                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none"
+                  className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all resize-none"
                   placeholder="Describe el curso..."
                 />
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex gap-3">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl hover:bg-white font-semibold text-slate-700 transition-colors"
@@ -723,7 +828,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
               </button>
               <button
                 onClick={handleCreateCourse}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 font-semibold shadow-lg shadow-emerald-500/25 transition-all"
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-slate-700 text-white rounded-xl hover:from-red-600 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 transition-all"
               >
                 Crear curso
               </button>

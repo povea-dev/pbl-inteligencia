@@ -13,20 +13,20 @@ from config import get_settings
 try:
     import PyPDF2
     PDF_AVAILABLE = True
-    print("✅ PyPDF2 está disponible para extracción de PDF")
+    print("[OK] PyPDF2 está disponible para extracción de PDF")
 except ImportError as e:
     PDF_AVAILABLE = False
-    print(f"⚠️ ADVERTENCIA: PyPDF2 no está instalado. La extracción de PDF no funcionará.")
+    print(f"[ADVERTENCIA] PyPDF2 no está instalado. La extracción de PDF no funcionará.")
     print(f"   Instala con: pip install PyPDF2")
     print(f"   Error: {e}")
 
 try:
     from docx import Document
     DOCX_AVAILABLE = True
-    print("✅ python-docx está disponible para extracción de DOCX")
+    print("[OK] python-docx está disponible para extracción de DOCX")
 except ImportError as e:
     DOCX_AVAILABLE = False
-    print(f"⚠️ ADVERTENCIA: python-docx no está instalado. La extracción de DOCX no funcionará.")
+    print(f"[ADVERTENCIA] python-docx no está instalado. La extracción de DOCX no funcionará.")
     print(f"   Instala con: pip install python-docx")
     print(f"   Error: {e}")
 
@@ -50,7 +50,7 @@ class FileService:
             print(f"Error obteniendo archivos del curso: {e}")
             return []
     
-    async def extract_text_from_url(self, file_url: str, file_type: str, max_length: int = 50000) -> Optional[str]:
+    async def extract_text_from_url(self, file_url: str, file_type: str, max_length: int = 8000, max_pages: int = 10) -> Optional[str]:
         """
         Extrae texto de un archivo desde su URL
         Soporta PDF, DOCX, TXT
@@ -60,7 +60,8 @@ class FileService:
             # Normalizar tipo de archivo
             file_type = file_type.lower().strip()
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            # Timeout reducido para respuestas más rápidas
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(file_url)
                 response.raise_for_status()
                 
@@ -82,9 +83,9 @@ class FileService:
                         pdf_reader = PyPDF2.PdfReader(pdf_file)
                         text_parts = []
                         
-                        # Extraer texto de las primeras páginas (limitar para no exceder max_length)
-                        max_pages = min(20, len(pdf_reader.pages))  # Máximo 20 páginas
-                        for i in range(max_pages):
+                        # Extraer texto de las primeras páginas (usar max_pages del parámetro)
+                        pages_to_read = min(max_pages, len(pdf_reader.pages))
+                        for i in range(pages_to_read):
                             page = pdf_reader.pages[i]
                             page_text = page.extract_text()
                             if page_text:
@@ -131,7 +132,7 @@ class FileService:
             traceback.print_exc()
             return None
     
-    async def extract_text_from_files(self, files: List[dict], max_files: int = 5) -> str:
+    async def extract_text_from_files(self, files: List[dict], max_files: int = 5, max_chars: int = 50000, max_pages_per_file: int = 10) -> str:
         """
         Extrae texto de múltiples archivos y los combina
         Retorna el texto combinado de todos los archivos
@@ -150,14 +151,20 @@ class FileService:
                 continue
             
             print(f"Extrayendo texto de: {file_name} ({file_type})")
-            text = await self.extract_text_from_url(file_url, file_type)
+            # Calcular max_length por archivo basado en max_chars total
+            chars_per_file = max_chars // max_files if max_files > 0 else max_chars
+            text = await self.extract_text_from_url(file_url, file_type, max_length=chars_per_file, max_pages=max_pages_per_file)
             
             if text:
                 extracted_texts.append(f"=== {file_name} ===\n{text}\n")
             else:
                 print(f"No se pudo extraer texto de: {file_name}")
         
-        return "\n\n".join(extracted_texts)
+        combined_text = "\n\n".join(extracted_texts)
+        # Limitar el texto total combinado
+        if len(combined_text) > max_chars:
+            combined_text = combined_text[:max_chars] + "\n\n[... contenido truncado para optimizar velocidad ...]"
+        return combined_text
     
     def is_course_related(self, message: str, course_title: str = "") -> bool:
         """

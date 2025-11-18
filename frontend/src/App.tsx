@@ -18,17 +18,33 @@ export default function App() {
   const [user, setUser] = useState<AppUser | null | undefined>(undefined);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!isMounted) return;
+      
       if (!firebaseUser) {
         setUser(null);
         return;
       }
 
-      const appUser = await getCurrentUserWithRole(firebaseUser);
-      setUser(appUser);
+      try {
+        const appUser = await getCurrentUserWithRole(firebaseUser);
+        if (isMounted) {
+          setUser(appUser);
+        }
+      } catch (error) {
+        console.error('Error obteniendo usuario:', error);
+        if (isMounted) {
+          setUser(null);
+        }
+      }
     });
     
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -42,10 +58,10 @@ export default function App() {
 
   if (user === undefined) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
+      <div className="h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Cargando...</p>
         </div>
       </div>
     );
@@ -56,13 +72,7 @@ export default function App() {
       <Routes>
       <Route 
         path="/login" 
-        element={
-          user ? (
-            <Navigate to={user.role === 'teacher' ? '/teacher' : '/student'} replace />
-          ) : (
-            <Login />
-          )
-        } 
+        element={<Login />}
       />
 
       <Route

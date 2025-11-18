@@ -82,7 +82,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       <div
         className={`border-2 border-dashed rounded-xl p-10 text-center transition-all ${
           dragActive
-            ? 'border-emerald-500 bg-emerald-50/50 shadow-lg shadow-emerald-500/20'
+            ? 'border-red-500 bg-red-50/50 shadow-lg shadow-red-500/20'
             : 'border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-400'
         }`}
         onDrop={handleDrop}
@@ -91,18 +91,18 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       >
         {uploading ? (
           <div className="space-y-3">
-            <Loader2 className="w-12 h-12 text-emerald-600 animate-spin mx-auto" />
+            <Loader2 className="w-12 h-12 text-red-600 animate-spin mx-auto" />
             <p className="text-sm font-medium text-slate-700">Subiendo archivo...</p>
             <p className="text-xs text-slate-500">Por favor espera</p>
           </div>
         ) : (
           <>
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl mb-4 border border-emerald-200/50">
-              <Upload className="w-8 h-8 text-emerald-600" />
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-100 to-slate-100 rounded-2xl mb-4 border border-red-200/50">
+              <Upload className="w-8 h-8 text-red-600" />
             </div>
             <div className="mt-4">
               <label htmlFor="file-upload" className="cursor-pointer">
-                <span className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-semibold transition-colors">
+                <span className="inline-flex items-center gap-2 text-red-600 hover:text-red-700 font-semibold transition-colors">
                   <File className="w-4 h-4" />
                   Selecciona un archivo
                 </span>

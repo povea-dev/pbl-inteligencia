@@ -37,8 +37,8 @@ export const FileList: React.FC<FileListProps> = ({ files, onDelete, loading, ca
         <div className="text-center">
           <Loader2 className={`w-8 h-8 animate-spin mx-auto mb-3 ${
             darkMode
-              ? canDelete ? 'text-emerald-400' : 'text-emerald-500'
-              : canDelete ? 'text-emerald-600' : 'text-emerald-500'
+              ? canDelete ? 'text-red-400' : 'text-red-500'
+              : canDelete ? 'text-red-600' : 'text-red-500'
           }`} />
           <p className={`text-sm ${
             darkMode
@@ -92,22 +92,22 @@ export const FileList: React.FC<FileListProps> = ({ files, onDelete, loading, ca
           className={`flex items-center justify-between p-4 border-2 rounded-xl transition-all group ${
             darkMode
               ? canDelete
-                ? 'bg-slate-700/50 border-slate-600 hover:border-emerald-600/50 hover:shadow-md'
-                : 'bg-slate-700/30 border-slate-600/50 hover:border-emerald-600/30'
+                ? 'bg-slate-700/50 border-slate-600 hover:border-red-600/50 hover:shadow-md'
+                : 'bg-slate-700/30 border-slate-600/50 hover:border-red-600/30'
               : canDelete
-                ? 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'
-                : 'bg-transparent border-slate-200/50 hover:border-emerald-300/50'
+                ? 'bg-white border-slate-200 hover:border-red-300 hover:shadow-md'
+                : 'bg-transparent border-slate-200/50 hover:border-red-300/50'
           }`}
         >
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center transition-colors ${
               darkMode
                 ? canDelete
-                  ? 'bg-slate-600 group-hover:bg-emerald-900/30'
-                  : 'bg-slate-600/50 group-hover:bg-emerald-900/20'
+                  ? 'bg-slate-600 group-hover:bg-red-900/30'
+                  : 'bg-slate-600/50 group-hover:bg-red-900/20'
                 : canDelete
-                  ? 'bg-slate-100 group-hover:bg-emerald-50'
-                  : 'bg-slate-100/50 group-hover:bg-emerald-50/50'
+                  ? 'bg-slate-100 group-hover:bg-red-50'
+                  : 'bg-slate-100/50 group-hover:bg-red-50/50'
             }`}>
               {getFileIcon(file.type)}
             </div>
@@ -140,8 +140,8 @@ export const FileList: React.FC<FileListProps> = ({ files, onDelete, loading, ca
             {file.processed && canDelete && (
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
                 darkMode
-                  ? 'bg-emerald-900/50 text-emerald-300 border-emerald-700'
-                  : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  ? 'bg-red-900/50 text-red-300 border-red-700'
+                  : 'bg-red-100 text-red-700 border-red-200'
               }`}>
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Procesado
@@ -156,8 +156,8 @@ export const FileList: React.FC<FileListProps> = ({ files, onDelete, loading, ca
               rel="noopener noreferrer"
               className={`p-2 rounded-lg transition-colors ${
                 darkMode
-                  ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30'
-                  : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                  ? 'text-red-400 hover:text-red-300 hover:bg-red-900/30'
+                  : 'text-red-600 hover:text-red-700 hover:bg-red-50'
               }`}
               title="Descargar archivo"
             >

@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
-import { Conversation } from '../../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Conversation, SearchResult } from '../../types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Plus, MessageSquare, Trash2, Calendar, Loader2, Clock, Edit2, Check, X, Circle } from 'lucide-react';
+import { conversationsService } from '../../services/conversationsService';
+import { Plus, MessageSquare, Trash2, Calendar, Loader2, Clock, Edit2, Check, X, Circle, Search, XCircle } from 'lucide-react';
 
 interface ConversationSidebarProps {
   conversations: Conversation[];
@@ -12,6 +13,9 @@ interface ConversationSidebarProps {
   onDeleteConversation: (conversationId: string) => void;
   onUpdateTitle?: (conversationId: string, newTitle: string) => void;
   loading?: boolean;
+  courseId: string;
+  userId: string | null; // null para docente (buscar todas)
+  onClose?: () => void; // Para cerrar en móviles
 }
 
 export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
@@ -21,11 +25,69 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onNewConversation,
   onDeleteConversation,
   onUpdateTitle,
-  loading
+  loading,
+  courseId,
+  userId,
+  onClose
 }) => {
   const { darkMode } = useTheme();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Búsqueda con debounce
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setIsSearching(true);
+      setSearchError(null);
+      try {
+        const results = await conversationsService.searchConversations(
+          courseId,
+          userId,
+          searchQuery,
+          { limit: 20, searchInMessages: true }
+        );
+        setSearchResults(results);
+      } catch (error) {
+        console.error('Error en búsqueda:', error);
+        setSearchError('Error al buscar conversaciones');
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300); // Debounce de 300ms
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, courseId, userId]);
+
+  // Función para resaltar texto
+  const highlightText = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === query.toLowerCase() ? (
+        <mark key={i} className={`${darkMode ? 'bg-red-900/50 text-red-200' : 'bg-red-100 text-red-800'} px-0.5 rounded`}>
+          {part}
+        </mark>
+      ) : part
+    );
+  };
+
+  // Determinar qué conversaciones mostrar
+  const displayConversations = useMemo(() => {
+    if (searchQuery.trim() && searchResults.length > 0) {
+      return searchResults.map(result => result.conversation);
+    }
+    return conversations;
+  }, [searchQuery, searchResults, conversations]);
 
   const handleStartEdit = (conversation: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -68,7 +130,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       }`}>
         <div className="text-center">
           <Loader2 className={`w-8 h-8 animate-spin mx-auto mb-3 ${
-            darkMode ? 'text-emerald-400' : 'text-emerald-600'
+            darkMode ? 'text-red-400' : 'text-red-600'
           }`} />
           <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>Cargando...</p>
         </div>
@@ -77,20 +139,63 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   }
 
   return (
-    <div className={`w-80 border-r backdrop-blur-lg flex flex-col shadow-sm ${
+    <div className={`w-80 max-w-[85vw] h-full border-r backdrop-blur-lg flex flex-col shadow-sm ${
       darkMode 
         ? 'border-slate-700/50 bg-slate-800/80' 
         : 'border-slate-200/50 bg-white/80'
     }`}>
       {/* Header */}
-      <div className={`p-5 border-b ${
+      <div className={`p-4 sm:p-5 border-b space-y-3 ${
         darkMode
-          ? 'border-slate-700/50 bg-gradient-to-r from-emerald-900/20 to-teal-900/20'
-          : 'border-slate-200/50 bg-gradient-to-r from-emerald-50/50 to-teal-50/50'
+          ? 'border-slate-700/50 bg-gradient-to-r from-red-900/20 to-slate-900/20'
+          : 'border-slate-200/50 bg-gradient-to-r from-red-50/50 to-slate-50/50'
       }`}>
+        {/* Botón cerrar para móviles */}
+        {onClose && (
+          <div className="flex justify-end lg:hidden">
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg transition-colors ${
+                darkMode 
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-700' 
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+        {/* Barra de búsqueda */}
+        <div className="relative">
+          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${
+            darkMode ? 'text-slate-400' : 'text-slate-500'
+          }`} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar conversaciones..."
+            className={`w-full pl-10 pr-10 py-2.5 rounded-lg border-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all ${
+              darkMode
+                ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
+                : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'
+            }`}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded ${
+                darkMode ? 'hover:bg-slate-600 text-slate-400' : 'hover:bg-slate-100 text-slate-500'
+              }`}
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         <button
           onClick={onNewConversation}
-          className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl px-4 py-3 hover:from-emerald-600 hover:to-teal-700 transition-all font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
+          className="w-full bg-gradient-to-r from-red-600 to-slate-700 text-white rounded-xl px-4 py-3 hover:from-red-700 hover:to-slate-800 transition-all font-semibold shadow-lg shadow-red-500/25 hover:shadow-red-500/40 flex items-center justify-center gap-2"
         >
           <Plus className="w-5 h-5" />
           Nueva conversación
@@ -99,7 +204,39 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
       {/* Lista de conversaciones */}
       <div className="flex-1 overflow-y-auto">
-        {conversations.length === 0 ? (
+        {/* Estado de búsqueda */}
+        {isSearching && (
+          <div className="p-8 text-center">
+            <Loader2 className={`w-6 h-6 animate-spin mx-auto mb-2 ${
+              darkMode ? 'text-red-400' : 'text-red-600'
+            }`} />
+            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              Buscando...
+            </p>
+          </div>
+        )}
+
+        {!isSearching && searchQuery && searchResults.length === 0 && !searchError && (
+          <div className="p-8 text-center">
+            <Search className={`w-8 h-8 mx-auto mb-3 ${
+              darkMode ? 'text-slate-500' : 'text-slate-400'
+            }`} />
+            <p className={`font-medium mb-1 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+              No se encontraron resultados
+            </p>
+            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              Intenta con otros términos de búsqueda
+            </p>
+          </div>
+        )}
+
+        {searchError && (
+          <div className="p-4 m-4 rounded-lg bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800">
+            <p className="text-sm text-red-800 dark:text-red-300">{searchError}</p>
+          </div>
+        )}
+
+        {!isSearching && displayConversations.length === 0 && !searchQuery ? (
           <div className="p-8 text-center">
             <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 ${
               darkMode ? 'bg-slate-700' : 'bg-slate-100'
@@ -115,14 +252,19 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           </div>
         ) : (
           <div className={`divide-y ${darkMode ? 'divide-slate-700/50' : 'divide-slate-200/50'}`}>
-            {conversations.map((conversation) => (
+            {displayConversations.map((conversation) => {
+              // Obtener información de búsqueda si está disponible
+              const searchResult = searchResults.find(r => r.conversation.id === conversation.id);
+              const titleMatches = searchResult?.matches.filter(m => m.type === 'title') || [];
+              
+              return (
               <div
                 key={conversation.id}
                 className={`p-4 cursor-pointer transition-all relative group border-l-4 ${
                   currentConversationId === conversation.id
                     ? darkMode
-                      ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/30 border-emerald-500'
-                      : 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-500'
+                      ? 'bg-gradient-to-r from-red-900/30 to-slate-900/30 border-red-600'
+                      : 'bg-gradient-to-r from-red-50 to-slate-50 border-red-600'
                     : darkMode
                       ? 'hover:bg-slate-700/50 border-transparent'
                       : 'hover:bg-slate-50 border-transparent'
@@ -134,7 +276,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                     <div className="flex items-start gap-2 mb-2">
                       <MessageSquare className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
                         currentConversationId === conversation.id 
-                          ? darkMode ? 'text-emerald-400' : 'text-emerald-600'
+                          ? darkMode ? 'text-red-400' : 'text-red-600'
                           : darkMode ? 'text-slate-500' : 'text-slate-400'
                       }`} />
                       {editingId === conversation.id ? (
@@ -151,7 +293,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                                 handleCancelEdit(e as any);
                               }
                             }}
-                            className={`flex-1 text-sm font-semibold border-2 border-emerald-500 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${
+                            className={`flex-1 text-sm font-semibold border-2 border-red-600 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-red-500/20 ${
                               darkMode
                                 ? 'bg-slate-700 text-white'
                                 : 'bg-white text-slate-900'
@@ -162,8 +304,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                             onClick={(e) => handleSaveEdit(conversation.id, e)}
                             className={`p-1 rounded ${
                               darkMode
-                                ? 'hover:bg-emerald-900/50 text-emerald-400'
-                                : 'hover:bg-emerald-50 text-emerald-600'
+                                ? 'hover:bg-red-900/50 text-red-400'
+                                : 'hover:bg-red-50 text-red-600'
                             }`}
                             title="Guardar"
                           >
@@ -185,7 +327,9 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                         <h3 className={`text-sm font-semibold truncate flex-1 ${
                           darkMode ? 'text-white' : 'text-slate-900'
                         }`}>
-                          {conversation.title}
+                          {searchQuery && titleMatches.length > 0
+                            ? highlightText(conversation.title, searchQuery)
+                            : conversation.title}
                         </h3>
                       )}
                     </div>
@@ -201,7 +345,32 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                         <MessageSquare className="w-3 h-3" />
                         {conversation.messageCount} mensajes
                       </span>
+                      {searchResult && searchResult.matches.length > 0 && (
+                        <>
+                          <Circle className={`w-1 h-1 fill-current ${darkMode ? 'text-slate-500' : 'text-slate-400'}`} />
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            darkMode ? 'bg-red-900/30 text-red-300' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {searchResult.matches.length} coincidencia{searchResult.matches.length !== 1 ? 's' : ''}
+                          </span>
+                        </>
+                      )}
                     </div>
+                    {/* Mostrar snippets de mensajes encontrados */}
+                    {searchResult && searchResult.matches.filter(m => m.type === 'message').length > 0 && (
+                      <div className={`mt-2 ml-6 text-xs space-y-1 ${
+                        darkMode ? 'text-slate-400' : 'text-slate-600'
+                      }`}>
+                        {searchResult.matches
+                          .filter(m => m.type === 'message')
+                          .slice(0, 2) // Mostrar máximo 2 snippets
+                          .map((match, idx) => (
+                            <div key={idx} className="truncate italic">
+                              "{highlightText(match.snippet, searchQuery)}"
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                   
                   {/* Botones de acción (aparecen al hacer hover) */}
@@ -212,8 +381,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                           onClick={(e) => handleStartEdit(conversation, e)}
                           className={`p-2 rounded-lg ${
                             darkMode
-                              ? 'hover:bg-emerald-900/50 text-emerald-400'
-                              : 'hover:bg-emerald-50 text-emerald-600'
+                              ? 'hover:bg-red-900/50 text-red-400'
+                              : 'hover:bg-red-50 text-red-600'
                           }`}
                           title="Editar nombre"
                         >
@@ -240,7 +409,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                   )}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

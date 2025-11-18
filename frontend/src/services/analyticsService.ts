@@ -10,7 +10,8 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { StudentActivity, FrequentQuestion } from '../types';
+import { StudentActivity, FrequentQuestion, DailyStats } from '../types';
+import { format, startOfDay, subDays, getHours } from 'date-fns';
 
 export const analyticsService = {
   /**
@@ -222,8 +223,10 @@ export const analyticsService = {
         }
       }
       
+      // Filtrar preguntas que se hayan hecho más de 5 veces
       // Ordenar por frecuencia (count) y luego por última vez preguntada
       const sortedQuestions = Array.from(questionMap.values())
+        .filter(q => q.count > 5) // Solo preguntas que se hayan hecho más de 5 veces
         .sort((a, b) => {
           if (b.count !== a.count) {
             return b.count - a.count; // Más frecuentes primero
@@ -301,6 +304,120 @@ export const analyticsService = {
       }));
     } catch (error) {
       console.error('Error obteniendo actividad reciente:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener estadísticas diarias (mensajes y conversaciones por día)
+   */
+  async getDailyStats(courseId: string, days: number = 30): Promise<DailyStats[]> {
+    try {
+      const conversationsSnapshot = await getDocs(
+        collection(db, 'courses', courseId, 'conversations')
+      );
+
+      const messagesByDay = new Map<string, number>();
+      const conversationsByDay = new Map<string, number>();
+      const activeStudentsByDay = new Map<string, Set<string>>();
+      const now = new Date();
+      const startDate = subDays(now, days);
+
+      // Inicializar todos los días con 0
+      for (let i = 0; i < days; i++) {
+        const date = subDays(now, i);
+        const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
+        messagesByDay.set(dayKey, 0);
+        conversationsByDay.set(dayKey, 0);
+        activeStudentsByDay.set(dayKey, new Set());
+      }
+
+      // Procesar conversaciones
+      for (const convDoc of conversationsSnapshot.docs) {
+        const conv = convDoc.data();
+        const createdAt = (conv.createdAt as Timestamp)?.toDate() || new Date();
+        const lastMessageAt = (conv.lastMessageAt as Timestamp)?.toDate() || createdAt;
+        
+        // Solo procesar si está en el rango de fechas
+        if (lastMessageAt >= startDate) {
+          const dayKey = format(startOfDay(lastMessageAt), 'yyyy-MM-dd');
+          
+          // Contar mensajes del día
+          const currentMessages = messagesByDay.get(dayKey) || 0;
+          messagesByDay.set(dayKey, currentMessages + (conv.messageCount || 0));
+          
+          // Contar conversaciones creadas ese día
+          const createdDayKey = format(startOfDay(createdAt), 'yyyy-MM-dd');
+          if (createdAt >= startDate) {
+            const currentConvs = conversationsByDay.get(createdDayKey) || 0;
+            conversationsByDay.set(createdDayKey, currentConvs + 1);
+          }
+          
+          // Contar estudiantes activos
+          if (conv.userRole === 'student') {
+            const students = activeStudentsByDay.get(dayKey) || new Set();
+            students.add(conv.userId);
+            activeStudentsByDay.set(dayKey, students);
+          }
+        }
+      }
+
+      // Convertir a array y ordenar
+      const dailyStats: DailyStats[] = Array.from(messagesByDay.keys())
+        .sort()
+        .map(dayKey => ({
+          date: dayKey,
+          totalMessages: messagesByDay.get(dayKey) || 0,
+          activeStudents: activeStudentsByDay.get(dayKey)?.size || 0,
+          avgResponseTime: 0, // No calculamos esto por ahora
+          topTopics: []
+        }));
+
+      return dailyStats;
+    } catch (error) {
+      console.error('Error obteniendo estadísticas diarias:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener actividad por hora del día
+   */
+  async getActivityByHour(courseId: string): Promise<Array<{ hour: number; count: number }>> {
+    try {
+      const conversationsSnapshot = await getDocs(
+        collection(db, 'courses', courseId, 'conversations')
+      );
+
+      const activityByHour = new Map<number, number>();
+
+      // Inicializar todas las horas con 0
+      for (let hour = 0; hour < 24; hour++) {
+        activityByHour.set(hour, 0);
+      }
+
+      // Procesar todas las conversaciones y sus mensajes
+      for (const convDoc of conversationsSnapshot.docs) {
+        const convId = convDoc.id;
+        const messagesRef = collection(db, 'courses', courseId, 'conversations', convId, 'messages');
+        const messagesSnapshot = await getDocs(messagesRef);
+
+        messagesSnapshot.docs.forEach(msgDoc => {
+          const msg = msgDoc.data();
+          const timestamp = (msg.timestamp as Timestamp)?.toDate() || new Date();
+          const hour = getHours(timestamp);
+          const currentCount = activityByHour.get(hour) || 0;
+          activityByHour.set(hour, currentCount + 1);
+        });
+      }
+
+      // Convertir a array
+      return Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        count: activityByHour.get(hour) || 0
+      }));
+    } catch (error) {
+      console.error('Error obteniendo actividad por hora:', error);
       throw error;
     }
   }

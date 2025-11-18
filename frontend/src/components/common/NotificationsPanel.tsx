@@ -87,7 +87,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
       onClick={onClose}
     >
       <div 
-        className={`absolute right-0 top-0 h-full w-full max-w-md shadow-2xl ${
+        className={`absolute right-0 top-0 h-full w-full max-w-md sm:max-w-lg shadow-2xl ${
           darkMode 
             ? 'bg-slate-800 border-l border-slate-700' 
             : 'bg-white border-l border-slate-200'
@@ -95,16 +95,16 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`px-6 py-5 border-b flex items-center justify-between ${
+        <div className={`px-4 sm:px-6 py-4 sm:py-5 border-b flex items-center justify-between ${
           darkMode ? 'border-slate-700' : 'border-slate-200'
         }`}>
           <div className="flex items-center gap-3">
-            <Bell className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+            <Bell className={`w-5 h-5 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
             <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
               Notificaciones
             </h2>
             {unreadCount > 0 && (
-              <span className="px-2 py-0.5 bg-emerald-600 text-white text-xs font-bold rounded-full">
+              <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full">
                 {unreadCount}
               </span>
             )}
@@ -141,7 +141,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-200 border-t-emerald-600 mx-auto mb-2"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-red-200 border-t-red-600 mx-auto mb-2"></div>
                 <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                   Cargando notificaciones...
                 </p>
@@ -170,13 +170,13 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
                         : 'bg-white hover:bg-slate-50'
                       : darkMode
                         ? 'bg-slate-700/50 hover:bg-slate-700'
-                        : 'bg-emerald-50/50 hover:bg-emerald-50'
+                        : 'bg-red-50/50 hover:bg-red-50'
                   }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
                       notification.type === 'file_uploaded'
-                        ? 'bg-emerald-100 text-emerald-600'
+                        ? 'bg-red-100 text-red-600'
                         : 'bg-slate-100 text-slate-600'
                     }`}>
                       {notification.type === 'file_uploaded' ? (
@@ -210,7 +210,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
                           </p>
                         </div>
                         {!notification.read && (
-                          <div className="w-2 h-2 bg-emerald-600 rounded-full flex-shrink-0 mt-1"></div>
+                          <div className="w-2 h-2 bg-red-600 rounded-full flex-shrink-0 mt-1"></div>
                         )}
                       </div>
                     </div>

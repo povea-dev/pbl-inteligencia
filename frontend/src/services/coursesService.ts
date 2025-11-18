@@ -79,7 +79,8 @@ export const coursesService = {
         teacherId: data.teacherId,
         teacherName: teacherName,
         createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-        status: data.status || 'active'
+        status: data.status || 'active',
+        maxPagesPerFile: data.maxPagesPerFile || 10
       };
     });
   },
@@ -160,7 +161,8 @@ export const coursesService = {
             teacherId: data.teacherId,
             teacherName: teacherName,
             createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-            status: data.status || 'active'
+            status: data.status || 'active',
+        maxPagesPerFile: data.maxPagesPerFile || 10
           };
         })
       );
@@ -192,7 +194,8 @@ export const coursesService = {
       teacherId: data.teacherId,
       teacherName: teacherName,
       createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-      status: data.status || 'active'
+      status: data.status || 'active',
+      maxPagesPerFile: data.maxPagesPerFile || 10
     };
   },
 
@@ -201,7 +204,7 @@ export const coursesService = {
    */
   async updateCourse(
     courseId: string,
-    updates: Partial<Pick<Course, 'title' | 'description'>>
+    updates: Partial<Pick<Course, 'title' | 'description' | 'maxPagesPerFile'>>
   ): Promise<void> {
     const courseRef = doc(db, 'courses', courseId);
     await updateDoc(courseRef, updates);

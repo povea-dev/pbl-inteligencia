@@ -8,7 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  timeout: 60000 // 60 segundos para procesamiento de archivos
+  timeout: 60000 // 60 segundos (1 minuto) - optimizado para respuestas más rápidas
 });
 
 /**

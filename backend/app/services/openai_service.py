@@ -38,13 +38,13 @@ class OpenAIService:
 4. **Si la pregunta no está relacionada con el curso, debes rechazarla educadamente** y redirigir al estudiante a preguntar sobre el curso
 
 **CUÁNDO DAR RESPUESTAS DIRECTAS (está permitido):**
-- ✅ **Resúmenes generales del curso**: Cuando el estudiante pregunta "¿De qué trata este curso?" o "¿Qué temas se cubren?", DEBES dar un resumen completo y detallado basándote en el contenido de los archivos.
-- ✅ **Explicaciones de conceptos**: Cuando el estudiante pregunta sobre conceptos, definiciones o temas del curso, puedes explicarlos directamente usando el contenido de los archivos.
-- ✅ **Información sobre el contenido**: Puedes compartir información específica del curso cuando se solicite.
+- **Resúmenes generales del curso**: Cuando el estudiante pregunta "¿De qué trata este curso?" o "¿Qué temas se cubren?", DEBES dar un resumen completo y detallado basándote en el contenido de los archivos.
+- **Explicaciones de conceptos**: Cuando el estudiante pregunta sobre conceptos, definiciones o temas del curso, puedes explicarlos directamente usando el contenido de los archivos.
+- **Información sobre el contenido**: Puedes compartir información específica del curso cuando se solicite.
 
 **CUÁNDO GUIAR EN LUGAR DE RESOLVER (metodología PBL):**
-- ❌ **NO resuelvas tareas, ejercicios o problemas**: Si el estudiante pide que le resuelvas una tarea, ejercicio o problema, guíalo con preguntas socráticas en lugar de dar la solución directa.
-- ❌ **NO hagas el trabajo por el estudiante**: En lugar de resolver problemas, ayuda al estudiante a pensar y llegar a sus propias conclusiones.
+- **NO resuelvas tareas, ejercicios o problemas**: Si el estudiante pide que le resuelvas una tarea, ejercicio o problema, guíalo con preguntas socráticas en lugar de dar la solución directa.
+- **NO hagas el trabajo por el estudiante**: En lugar de resolver problemas, ayuda al estudiante a pensar y llegar a sus propias conclusiones.
 
 **Tu rol es:**
 1. **Proporcionar información del curso**: Comparte conocimiento y resúmenes del contenido del curso cuando se solicite.
@@ -83,21 +83,57 @@ class OpenAIService:
                 base_prompt += file_contents
                 base_prompt += "\n\n**INSTRUCCIONES FINALES:**\n"
                 base_prompt += "- Usa SOLO la información de estos archivos para responder.\n"
+                base_prompt += "- Si detectas que el contenido de los archivos NO está relacionado con el curso, debes informar al estudiante que los archivos no están relacionados y que no puedes responder hasta que se suban archivos correctos.\n"
                 base_prompt += "- Para preguntas sobre el curso (resúmenes, temas, conceptos): Proporciona respuestas completas y directas basadas en el contenido de arriba.\n"
                 base_prompt += "- Para tareas y problemas: Guía al estudiante con preguntas socráticas en lugar de resolver directamente.\n"
             else:
                 base_prompt += "\n**Usa SOLO la información de estos archivos para responder. Si la pregunta no está relacionada con estos materiales, recházala educadamente.**"
         else:
-            base_prompt += "\n\n**⚠️ NO HAY ARCHIVOS EN EL CURSO:** Si el estudiante hace una pregunta, debes informarle que el docente aún no ha subido materiales al curso y que no puedes responder hasta que haya archivos disponibles."
+            base_prompt += "\n\n**ADVERTENCIA - NO HAY ARCHIVOS EN EL CURSO:** Si el estudiante hace una pregunta, debes informarle que el docente aún no ha subido materiales al curso y que no puedes responder hasta que haya archivos disponibles."
         
         return base_prompt.format(course_title=course_title or "el curso")
+
+    async def _check_content_relevance(self, file_contents: str, course_title: str) -> bool:
+        """
+        Verifica si el contenido de los archivos está relacionado con el curso.
+        Usa la IA para hacer una verificación rápida.
+        """
+        try:
+            # Crear un prompt simple para verificar relevancia
+            relevance_prompt = f"""Analiza si el siguiente contenido está relacionado con el curso "{course_title}".
+
+CONTENIDO DEL ARCHIVO (primeros 1000 caracteres):
+{file_contents[:1000]}
+
+Responde SOLO con "SÍ" si el contenido está relacionado con el curso, o "NO" si no está relacionado."""
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "Eres un asistente que verifica si el contenido de un archivo está relacionado con un curso. Responde SOLO con 'SÍ' o 'NO'."},
+                    {"role": "user", "content": relevance_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            answer = response.choices[0].message.content.strip().upper()
+            is_related = "SÍ" in answer or "SI" in answer or "YES" in answer
+            
+            print(f"[DEBUG] Verificación de relevancia: {answer} -> {is_related}")
+            return is_related
+            
+        except Exception as e:
+            print(f"[ERROR] Error verificando relevancia: {e}")
+            # En caso de error, asumir que está relacionado para no bloquear respuestas
+            return True
 
     def _build_messages(self, request: FeedbackRequest, course_files: List[dict] = None, course_title: str = "", file_contents: str = "") -> List[dict]:
         """Convierte tu historial a formato OpenAI Chat con contexto del curso."""
         messages: List[dict] = [{"role": "system", "content": self._build_system_prompt(course_files, course_title, file_contents)}]
 
-        # historial (últimos 10)
-        for msg in request.conversationHistory[-10:]:
+        # historial (últimos 5 mensajes para respuestas más rápidas)
+        for msg in request.conversationHistory[-5:]:
             if msg.role in ["user", "assistant"]:
                 messages.append({"role": msg.role, "content": msg.content})
 
@@ -107,7 +143,7 @@ class OpenAIService:
             messages.append({"role": "user", "content": student_message})
         return messages
 
-    async def generate_feedback(self, request: FeedbackRequest, course_files: List[dict] = None, course_title: str = "") -> FeedbackResponse:
+    async def generate_feedback(self, request: FeedbackRequest, course_files: List[dict] = None, course_title: str = "", max_pages_per_file: int = 10) -> FeedbackResponse:
         """Genera feedback pedagógico usando OpenAI con contexto de archivos del curso."""
         try:
             # Detectar mal uso de IA (solo para estudiantes)
@@ -169,24 +205,53 @@ class OpenAIService:
                     assessment=None,
                 )
             
-            # Extraer contenido de los archivos
+            # Extraer contenido de los archivos (optimizado: solo primeros 3 archivos y limitar tamaño)
             file_contents = ""
             if course_files:
-                print(f"Extrayendo contenido de {len(course_files)} archivos...")
-                file_contents = await file_service.extract_text_from_files(course_files, max_files=5)
+                print(f"[DEBUG] Curso: {course_title}")
+                print(f"[DEBUG] Archivos recibidos: {len(course_files)}")
+                for i, f in enumerate(course_files, 1):
+                    print(f"[DEBUG] Archivo {i}: {f.get('name', 'Sin nombre')} (tipo: {f.get('type', 'unknown')})")
+                
+                print(f"Extrayendo contenido de {min(len(course_files), 3)} archivos (máximo {max_pages_per_file} páginas por archivo)...")
+                # Limitar a 3 archivos y truncar contenido para respuestas más rápidas
+                file_contents = await file_service.extract_text_from_files(
+                    course_files, 
+                    max_files=3, 
+                    max_chars=8000,
+                    max_pages_per_file=max_pages_per_file
+                )
                 if file_contents:
                     print(f"Contenido extraído: {len(file_contents)} caracteres")
+                    # Mostrar un preview del contenido extraído
+                    preview = file_contents[:200] + "..." if len(file_contents) > 200 else file_contents
+                    print(f"[DEBUG] Preview del contenido: {preview}")
+                    
+                    # Verificar si el contenido está relacionado con el curso
+                    is_related = await self._check_content_relevance(file_contents, course_title)
+                    if not is_related:
+                        return FeedbackResponse(
+                            response="Lo siento, pero los archivos subidos al curso no están relacionados con el contenido del curso. No puedo responder preguntas hasta que se suban archivos que correspondan al tema del curso. Por favor, contacta al docente para que suba los materiales correctos relacionados con el curso.",
+                            feedback="Lo siento, pero los archivos subidos al curso no están relacionados con el contenido del curso. No puedo responder preguntas hasta que se suban archivos que correspondan al tema del curso. Por favor, contacta al docente para que suba los materiales correctos relacionados con el curso.",
+                            tokensUsed=None,
+                            sourcesUsed=None,
+                            suggestions=None,
+                            nextQuestion=None,
+                            assessment=None,
+                        )
                 else:
                     print("No se pudo extraer contenido de los archivos")
             
             # Si no hay mal uso, generar feedback normal con contexto
             messages = self._build_messages(request, course_files, course_title, file_contents)
 
+            # Optimizar para respuestas más rápidas
             resp = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1024,
+                max_tokens=800,  # Reducido de 1024 a 800 para respuestas más rápidas
+                stream=False,  # No usar streaming para mantener compatibilidad
             )
 
             feedback_text = resp.choices[0].message.content or "No se recibió contenido."

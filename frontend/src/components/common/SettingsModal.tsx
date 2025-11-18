@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppUser } from '../../types';
-import { X, User, Moon, Sun, Save, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, User, Save, Loader2, AlertCircle, CheckCircle, BookOpen } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -10,13 +10,15 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUserUpdate: (updatedUser: AppUser) => void;
+  onShowTutorial?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   user,
   isOpen,
   onClose,
-  onUserUpdate
+  onUserUpdate,
+  onShowTutorial
 }) => {
   const { darkMode, setDarkMode } = useTheme();
   const [firstName, setFirstName] = useState(user.firstName || '');
@@ -63,14 +65,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       });
 
       setSuccess(true);
+      // Cerrar el modal inmediatamente después de guardar
       setTimeout(() => {
-        setSuccess(false);
         onClose();
-      }, 1500);
+      }, 500);
     } catch (error: any) {
       console.error('Error actualizando perfil:', error);
       setError('Error al actualizar el perfil. Por favor, intenta nuevamente.');
-    } finally {
       setSaving(false);
     }
   };
@@ -83,7 +84,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className={`rounded-2xl shadow-2xl max-w-md w-full mx-4 animate-fade-in-up ${
+        className={`rounded-xl sm:rounded-2xl shadow-2xl max-w-md w-full mx-2 sm:mx-4 animate-fade-in-up max-h-[90vh] overflow-y-auto ${
           darkMode 
             ? 'bg-slate-800 border border-slate-700' 
             : 'bg-white'
@@ -91,15 +92,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className={`px-6 py-5 border-b flex items-center justify-between ${
+        <div className={`px-4 sm:px-6 py-4 sm:py-5 border-b flex items-center justify-between ${
           darkMode 
             ? 'border-slate-700 bg-gradient-to-r from-slate-800 to-slate-900' 
-            : 'border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50'
+            : 'border-slate-200 bg-gradient-to-r from-red-50 to-slate-50'
         }`}>
           <h2 className={`text-xl font-bold flex items-center gap-2 ${
             darkMode ? 'text-white' : 'text-slate-900'
           }`}>
-            <User className="w-5 h-5 text-emerald-600" />
+            <User className="w-5 h-5 text-red-600" />
             Configuración
           </h2>
           <button
@@ -114,7 +115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
         
-        <div className={`p-6 space-y-6 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+        <div className={`p-4 sm:p-6 space-y-4 sm:space-y-6 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>
           {/* Perfil */}
           <div>
             <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -129,7 +130,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className={`w-full border-2 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
+                  className={`w-full border-2 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all ${
                     darkMode
                       ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
                       : 'border-slate-200 text-slate-900'
@@ -146,7 +147,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="text"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className={`w-full border-2 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${
+                  className={`w-full border-2 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600 transition-all ${
                     darkMode
                       ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
                       : 'border-slate-200 text-slate-900'
@@ -174,39 +175,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Apariencia */}
-          <div>
-            <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-              Apariencia
-            </h3>
-            <div className="flex items-center justify-between p-4 rounded-xl border-2 border-slate-200 hover:border-emerald-300 transition-all">
-              <div className="flex items-center gap-3">
-                {darkMode ? (
-                  <Moon className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <Sun className="w-5 h-5 text-emerald-600" />
-                )}
-                <div>
-                  <p className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-                    Modo {darkMode ? 'Oscuro' : 'Claro'}
-                  </p>
-                  <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Cambiar entre tema oscuro y claro
-                  </p>
-                </div>
-              </div>
+          {/* Ver Tutorial */}
+          {onShowTutorial && (
+            <div className="space-y-2">
+              <label className={`block text-sm font-semibold ${
+                darkMode ? 'text-white' : 'text-slate-900'
+              }`}>
+                Ayuda
+              </label>
               <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                onClick={() => {
+                  onClose();
+                  onShowTutorial();
+                }}
+                className={`w-full px-4 py-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${
                   darkMode
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    : 'bg-slate-200 hover:bg-slate-300 text-slate-900'
+                    ? 'border-slate-600 hover:bg-slate-700 text-slate-300 hover:text-white'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700 hover:text-slate-900'
                 }`}
               >
-                {darkMode ? 'Claro' : 'Oscuro'}
+                <BookOpen className="w-4 h-4" />
+                <span className="font-semibold">Ver tutorial de uso</span>
               </button>
+              <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Aprende cómo usar todas las funcionalidades de la plataforma
+              </p>
             </div>
-          </div>
+          )}
 
           {/* Mensajes de error/éxito */}
           {error && (
@@ -227,21 +222,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {success && (
             <div className={`border-2 rounded-xl p-3 flex items-start gap-3 ${
               darkMode
-                ? 'bg-emerald-900/20 border-emerald-800'
-                : 'bg-emerald-50 border-emerald-200'
+                ? 'bg-red-900/20 border-red-800'
+                : 'bg-red-50 border-red-200'
             }`}>
               <CheckCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                darkMode ? 'text-emerald-400' : 'text-emerald-600'
+                darkMode ? 'text-red-400' : 'text-red-600'
               }`} />
               <p className={`text-sm font-medium ${
-                darkMode ? 'text-emerald-300' : 'text-emerald-800'
+                darkMode ? 'text-red-300' : 'text-red-800'
               }`}>Perfil actualizado correctamente</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className={`px-6 py-4 border-t flex gap-3 ${
+        <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t flex flex-col sm:flex-row gap-2 sm:gap-3 ${
           darkMode 
             ? 'border-slate-700 bg-slate-800' 
             : 'border-slate-200 bg-slate-50'
@@ -259,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl hover:from-emerald-600 hover:to-teal-700 font-semibold shadow-lg shadow-emerald-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-slate-700 text-white rounded-xl hover:from-red-700 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {saving ? (
               <>

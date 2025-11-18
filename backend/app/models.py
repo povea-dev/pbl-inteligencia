@@ -28,6 +28,7 @@ class FeedbackRequest(BaseModel):
     idToken: Optional[str] = None  # Token de Firebase para autenticación
     courseFiles: Optional[List[dict]] = Field(default_factory=list)  # Archivos del curso con URLs para extraer contenido
     courseTitle: Optional[str] = None  # Título del curso
+    maxPagesPerFile: Optional[int] = 10  # Máximo de páginas a leer por archivo PDF
 
 
 class FeedbackResponse(BaseModel):

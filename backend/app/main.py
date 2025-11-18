@@ -71,8 +71,9 @@ async def get_feedback(request: FeedbackRequest):
         # Obtener archivos y título del curso desde el request (el frontend los enviará)
         course_files = getattr(request, 'courseFiles', None) or []
         course_title = getattr(request, 'courseTitle', None) or ""
+        max_pages_per_file = getattr(request, 'maxPagesPerFile', None) or 10
         
-        feedback = await openai_service.generate_feedback(request, course_files, course_title)
+        feedback = await openai_service.generate_feedback(request, course_files, course_title, max_pages_per_file)
         return feedback
     
     except HTTPException:
