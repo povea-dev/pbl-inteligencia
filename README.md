@@ -404,7 +404,7 @@ pwd  # Debe mostrar: .../pbl-inteligencia/backend
 # Correcto (con dos puntos)
 uvicorn app.main:app --reload
 
-# ❌ Incorrecto (con punto)
+# Incorrecto (con punto)
 uvicorn app.main.app --reload
 ```
 
@@ -593,7 +593,7 @@ Este es un proyecto de innovación educativa. Para contribuir:
 
 ## Licencia
 
-Copyright (c) 2024 Rocio Povea Diaz
+Copyright (c) 2025 Rocio Povea Diaz
 
 Todos los derechos reservados.
 
