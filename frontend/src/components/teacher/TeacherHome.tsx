@@ -21,7 +21,7 @@ import {
   X,
   User,
   GraduationCap,
-  Brain,
+  Zap,
   Users,
   Mail,
   AlertCircle,
@@ -275,8 +275,9 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-red-600 to-slate-700 rounded-xl flex items-center justify-center shadow-lg shadow-red-500/25 flex-shrink-0">
-                <Brain className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+              <div className="relative w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-red-600 via-orange-500 to-red-700 rounded-xl flex items-center justify-center shadow-lg shadow-red-500/30 group flex-shrink-0">
+                <Zap className="w-4 h-4 sm:w-6 sm:h-6 text-white group-hover:scale-110 transition-transform duration-300 relative z-10" />
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-red-400/0 to-red-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className={`text-lg sm:text-2xl font-bold flex items-center gap-2 ${

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { login, register, signInWithGoogle, signInWithMicrosoft, resendVerificationEmail, updateUserRole, detectRoleFromEmail, sendPasswordReset, resetPasswordWithCode } from "../../services/authService";
 import { auth } from "../../config/firebase";
-import { Eye, EyeOff, GraduationCap, User, Mail, Lock, Brain, Sparkles, X, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { Eye, EyeOff, GraduationCap, User, Mail, Lock, Zap, Sparkles, Rocket, Bot, X, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 
 import uachLogo from "../../assets/logos/ua-logo.png";
 
@@ -36,6 +36,7 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [resetPasswordCode, setResetPasswordCode] = useState<string>("");
   const [resetPasswordEmail, setResetPasswordEmail] = useState<string>("");
+
 
   // Verificar si viene de una redirección por email no verificado, verificación de email o reset de contraseña
   useEffect(() => {
@@ -169,7 +170,7 @@ export default function Login() {
         // Solo detectar automáticamente si el usuario no ha cambiado el rol desde el default
         let roleToUse = role;
         
-        // Si el usuario NO ha seleccionado manualmente un rol (roleManuallySelected es false),
+        // Si el usuario no ha seleccionado manualmente un rol (roleManuallySelected es false),
         // entonces intentar detectarlo del correo
         if (!roleManuallySelected) {
           const detectedRole = detectRoleFromEmail(email);
@@ -218,28 +219,39 @@ export default function Login() {
     setEmailVerificationSent(false);
     setLoading(true);
     try {
-      const { user } = await signInWithGoogle(null);
+      const { user, needsRoleSelection } = await signInWithGoogle(null);
       
       // Verificar si el usuario ya existe en Firestore
       const { getCurrentUserWithRole } = await import("../../services/authService");
-      const appUser = await getCurrentUserWithRole(user);
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db } = await import("../../config/firebase");
       
-      // Si el usuario ya existe y tiene un rol guardado, redirigir directamente
-      if (appUser && appUser.role) {
-        const target = appUser.role === "teacher" ? "/teacher" : "/student";
-        nav(target, { replace: true });
-        return;
+      // Verificar directamente si el documento existe en Firestore
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      // Si el usuario ya existe en Firestore y tiene un rol guardado, redirigir directamente
+      if (userSnap.exists()) {
+        const appUser = await getCurrentUserWithRole(user);
+        if (appUser && appUser.role) {
+          const target = appUser.role === "teacher" ? "/teacher" : "/student";
+          nav(target, { replace: true });
+          return;
+        }
       }
       
-      // Si es un usuario nuevo o no tiene rol, mostrar modal para seleccionar
+      // SIEMPRE mostrar modal para usuarios nuevos (necesitan seleccionar su rol)
       const detectedRole = detectRoleFromEmail(user.email);
       
       if (detectedRole) {
         // Preseleccionar el rol detectado
         setRole(detectedRole);
+      } else {
+        // Si no se puede detectar, usar 'student' como predeterminado
+        setRole("student");
       }
       
-      // Mostrar modal solo para usuarios nuevos
+      // SIEMPRE mostrar modal para que el usuario seleccione su rol
       setPendingOAuthUser({ uid: user.uid, email: user.email });
       setShowRoleModal(true);
       setLoading(false);
@@ -264,28 +276,39 @@ export default function Login() {
     setEmailVerificationSent(false);
     setLoading(true);
     try {
-      const { user } = await signInWithMicrosoft(null);
+      const { user, needsRoleSelection } = await signInWithMicrosoft(null);
       
       // Verificar si el usuario ya existe en Firestore
       const { getCurrentUserWithRole } = await import("../../services/authService");
-      const appUser = await getCurrentUserWithRole(user);
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db } = await import("../../config/firebase");
       
-      // Si el usuario ya existe y tiene un rol guardado, redirigir directamente
-      if (appUser && appUser.role) {
-        const target = appUser.role === "teacher" ? "/teacher" : "/student";
-        nav(target, { replace: true });
-        return;
+      // Verificar directamente si el documento existe en Firestore
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      // Si el usuario ya existe en Firestore y tiene un rol guardado, redirigir directamente
+      if (userSnap.exists()) {
+        const appUser = await getCurrentUserWithRole(user);
+        if (appUser && appUser.role) {
+          const target = appUser.role === "teacher" ? "/teacher" : "/student";
+          nav(target, { replace: true });
+          return;
+        }
       }
       
-      // Si es un usuario nuevo o no tiene rol, mostrar modal para seleccionar
+      // SIEMPRE mostrar modal para usuarios nuevos (necesitan seleccionar su rol)
       const detectedRole = detectRoleFromEmail(user.email);
       
       if (detectedRole) {
         // Preseleccionar el rol detectado
         setRole(detectedRole);
+      } else {
+        // Si no se puede detectar, usar 'student' como predeterminado
+        setRole("student");
       }
       
-      // Mostrar modal solo para usuarios nuevos
+      // SIEMPRE mostrar modal para que el usuario seleccione su rol
       setPendingOAuthUser({ uid: user.uid, email: user.email });
       setShowRoleModal(true);
       setLoading(false);
@@ -310,7 +333,7 @@ export default function Login() {
     
     setLoading(true);
     try {
-      // Actualizar el rol en Firestore
+      // Crear o actualizar el usuario en Firestore con el rol seleccionado
       await updateUserRole(pendingOAuthUser.uid, selectedRole);
       
       // Esperar un momento para que Firestore se actualice
@@ -431,9 +454,13 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50 to-slate-100 flex items-center justify-center relative overflow-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 -left-20 w-96 h-96 bg-red-200/40 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-slate-300/40 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-slate-200/30 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/4 -left-20 w-96 h-96 bg-gradient-to-br from-red-200/50 via-orange-200/40 to-red-200/50 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-gradient-to-br from-orange-200/40 via-red-200/50 to-slate-300/40 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-red-200/30 via-orange-200/20 to-slate-200/30 rounded-full blur-3xl animate-pulse delay-500"></div>
+        {/* Floating particles */}
+        <div className="absolute top-20 left-20 w-2 h-2 bg-red-400/60 rounded-full animate-float"></div>
+        <div className="absolute top-40 right-40 w-3 h-3 bg-orange-400/60 rounded-full animate-float delay-300"></div>
+        <div className="absolute bottom-32 left-1/3 w-2 h-2 bg-red-500/60 rounded-full animate-float delay-700"></div>
       </div>
 
       <div className="w-full max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 p-6 lg:p-12 relative z-10">
@@ -442,23 +469,27 @@ export default function Login() {
           <div className="relative z-10 space-y-8">
             {/* Logo */}
             <div className="flex items-center gap-3 mb-8 animate-fade-in">
-              <div className="w-14 h-14 bg-gradient-to-br from-red-600 to-slate-700 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-red-200/50 shadow-lg shadow-red-500/20">
-                <Brain className="w-7 h-7 text-white" />
+              <div className="relative w-14 h-14 bg-gradient-to-br from-red-600 via-orange-500 to-red-700 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-red-200/50 shadow-lg shadow-red-500/30 group">
+                <Zap className="w-7 h-7 text-white group-hover:scale-110 transition-transform duration-300" />
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-red-400/0 to-red-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </div>
-              <span className="text-slate-800 text-2xl font-bold tracking-tight">PBL Classroom</span>
+              <span className="text-slate-800 text-2xl font-bold tracking-tight bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent">
+                EduFlow
+              </span>
             </div>
             
             {/* Main Content */}
             <div className="max-w-lg space-y-6">
               <h1 className="text-5xl lg:text-6xl font-bold text-slate-900 leading-tight animate-fade-in-up">
-                Aprendizaje Basado en Problemas con{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 via-slate-700 to-slate-800 animate-gradient">
-                  IA
-                </span>
+                Potencia tu{" "}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 via-orange-500 to-red-700 animate-gradient">
+                  aprendizaje
+                </span>{" "}
+                con IA
               </h1>
               <p className="text-xl text-slate-600 leading-relaxed animate-fade-in-up delay-100">
-                Transforma tu experiencia educativa con inteligencia artificial. 
-                Crea, colabora y resuelve problemas de manera innovadora.
+                La plataforma educativa inteligente que transforma cómo aprendes y enseñas. 
+                Colabora, crea y resuelve problemas de forma innovadora.
               </p>
               
               {/* Features */}
@@ -486,10 +517,13 @@ export default function Login() {
             {/* Mobile Header */}
             <div className="lg:hidden text-center mb-10 animate-fade-in">
               <div className="flex items-center justify-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-red-600 to-slate-700 rounded-xl flex items-center justify-center shadow-lg">
-                  <Brain className="w-6 h-6 text-white" />
+                <div className="relative w-12 h-12 bg-gradient-to-br from-red-600 via-orange-500 to-red-700 rounded-xl flex items-center justify-center shadow-lg group">
+                  <Zap className="w-6 h-6 text-white group-hover:scale-110 transition-transform duration-300" />
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-red-400/0 to-red-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 </div>
-                <span className="text-slate-800 text-xl font-bold">PBL Classroom</span>
+                <span className="text-slate-800 text-xl font-bold bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent">
+                  EduFlow
+                </span>
               </div>
             </div>
 
@@ -498,16 +532,13 @@ export default function Login() {
               {/* Form Header */}
               <div className="px-10 pt-10 pb-6">
                 <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-red-100 to-slate-100 rounded-2xl mb-6 border border-red-200/50 shadow-sm">
-                    <Sparkles className="w-10 h-10 text-red-600" />
-                  </div>
                   <h2 className="text-3xl font-bold text-slate-900 mb-3">
-                    {isRegister ? "Crear Cuenta" : "Bienvenido de Vuelta"}
+                    {isRegister ? "Crea tu cuenta" : "¡Bienvenido de vuelta!"}
                   </h2>
                   <p className="text-slate-600 text-base">
                     {isRegister 
-                      ? "Regístrate para comenzar tu experiencia educativa" 
-                      : "Ingresa a tu cuenta para continuar"
+                      ? "Únete a la plataforma educativa del futuro" 
+                      : "Continúa tu camino de aprendizaje"
                     }
                   </p>
                 </div>
@@ -953,7 +984,7 @@ export default function Login() {
               </div>
               
               <p className="text-xs text-slate-500">
-                © 2025 PBL Classroom. Educación impulsada por IA.
+                © 2025 EduFlow. Educación inteligente para todos.
               </p>
             </div>
           </div>
@@ -993,7 +1024,7 @@ export default function Login() {
                   <section>
                     <h4 className="text-lg font-bold text-slate-900 mb-3">1. Aceptación de los Términos</h4>
                     <p className="text-sm leading-relaxed mb-4">
-                      Al acceder y utilizar PBL Classroom, aceptas cumplir con estos Términos de Servicio. 
+                      Al acceder y utilizar EduFlow, aceptas cumplir con estos Términos de Servicio. 
                       Si no estás de acuerdo con alguna parte de estos términos, no debes utilizar nuestro servicio.
                     </p>
                   </section>
@@ -1001,7 +1032,7 @@ export default function Login() {
                   <section>
                     <h4 className="text-lg font-bold text-slate-900 mb-3">2. Descripción del Servicio</h4>
                     <p className="text-sm leading-relaxed mb-4">
-                      PBL Classroom es una plataforma educativa que utiliza inteligencia artificial para facilitar 
+                      EduFlow es una plataforma educativa que utiliza inteligencia artificial para facilitar 
                       el aprendizaje basado en problemas. Ofrecemos herramientas para estudiantes y docentes 
                       para crear, colaborar y resolver problemas educativos.
                     </p>
@@ -1019,7 +1050,7 @@ export default function Login() {
                   <section>
                     <h4 className="text-lg font-bold text-slate-900 mb-3">4. Uso Aceptable</h4>
                     <p className="text-sm leading-relaxed mb-4">
-                      Te comprometes a utilizar PBL Classroom únicamente para fines educativos legítimos. 
+                      Te comprometes a utilizar EduFlow únicamente para fines educativos legítimos. 
                       No debes usar el servicio para actividades ilegales, acosar a otros usuarios, o 
                       intentar acceder no autorizado a sistemas o datos.
                     </p>
@@ -1028,8 +1059,8 @@ export default function Login() {
                   <section>
                     <h4 className="text-lg font-bold text-slate-900 mb-3">5. Propiedad Intelectual</h4>
                     <p className="text-sm leading-relaxed mb-4">
-                      Todo el contenido de PBL Classroom, incluyendo diseño, texto, gráficos y software, 
-                      es propiedad de PBL Classroom o sus licenciantes. Conservas los derechos sobre el 
+                      Todo el contenido de EduFlow, incluyendo diseño, texto, gráficos y software, 
+                      es propiedad de EduFlow o sus licenciantes. Conservas los derechos sobre el 
                       contenido que creas y compartes en la plataforma.
                     </p>
                   </section>
@@ -1037,7 +1068,7 @@ export default function Login() {
                   <section>
                     <h4 className="text-lg font-bold text-slate-900 mb-3">6. Limitación de Responsabilidad</h4>
                     <p className="text-sm leading-relaxed mb-4">
-                      PBL Classroom se proporciona "tal cual" sin garantías de ningún tipo. No seremos 
+                      EduFlow se proporciona "tal cual" sin garantías de ningún tipo. No seremos 
                       responsables por daños indirectos, incidentales o consecuentes derivados del uso 
                       o la imposibilidad de usar nuestro servicio.
                     </p>
@@ -1191,6 +1222,17 @@ export default function Login() {
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.6; }
+          25% { transform: translateY(-20px) translateX(10px); opacity: 0.8; }
+          50% { transform: translateY(-10px) translateX(-10px); opacity: 1; }
+          75% { transform: translateY(-30px) translateX(5px); opacity: 0.7; }
+        }
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+        .delay-300 { animation-delay: 0.3s; }
+        .delay-700 { animation-delay: 0.7s; }
       `}</style>
 
       {/* Modal de "Olvidé mi contraseña" */}

@@ -2,7 +2,7 @@ import React from 'react';
 import { Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Brain, Sparkles, HelpCircle, Lightbulb } from 'lucide-react';
+import { Zap, Sparkles, HelpCircle, Lightbulb, Rocket } from 'lucide-react';
 
 interface MessageListProps {
   messages: Message[];
@@ -15,7 +15,7 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, onSuggestion
   const suggestions = [
     { text: "¿Cómo analizo este problema paso a paso?", icon: HelpCircle },
     { text: "¿Qué aspectos debo considerar primero?", icon: Lightbulb },
-    { text: "¿Puedes guiarme por el método PBL?", icon: Brain },
+    { text: "¿Puedes guiarme por el método PBL?", icon: Rocket },
   ];
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -28,24 +28,25 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, onSuggestion
     return (
       <div className="flex items-center justify-center h-full px-6">
         <div className="text-center max-w-lg">
-          <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6 border shadow-sm ${
+          <div className={`relative inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6 border shadow-lg group ${
             darkMode
-              ? 'bg-gradient-to-br from-red-900/50 to-slate-900/50 border-red-700/50'
-              : 'bg-gradient-to-br from-red-100 to-slate-100 border-red-200/50'
+              ? 'bg-gradient-to-br from-red-900/50 via-orange-900/30 to-slate-900/50 border-red-700/50'
+              : 'bg-gradient-to-br from-red-100 via-orange-50 to-red-100 border-red-200/50'
           }`}>
-            <Brain className={`w-10 h-10 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-red-400/20 to-orange-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Zap className={`w-10 h-10 relative z-10 group-hover:scale-110 group-hover:rotate-12 transition-all duration-300 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
           </div>
           <h3 className={`text-2xl font-bold mb-3 flex items-center justify-center gap-2 ${
             darkMode ? 'text-white' : 'text-slate-900'
           }`}>
-            <Sparkles className={`w-6 h-6 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
-            Hola, soy Asistente PBL
+            <Sparkles className={`w-6 h-6 ${darkMode ? 'text-red-400' : 'text-red-600'} animate-pulse`} />
+            ¡Hola! Soy tu Asistente IA
           </h3>
           <p className={`mb-10 text-base leading-relaxed ${
             darkMode ? 'text-slate-300' : 'text-slate-600'
           }`}>
             Puedo ayudarte a analizar problemas usando el método de Aprendizaje Basado en Problemas.
-            Hazme una pregunta para comenzar.
+            <span className="font-semibold text-red-600 dark:text-red-400"> ¡Hazme una pregunta para comenzar!</span>
           </p>
           
           <div className="space-y-3 text-left">

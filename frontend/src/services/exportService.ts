@@ -128,7 +128,7 @@ export const exportService = {
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
       doc.text(
-        `Página ${i} de ${totalPages} - PBL Classroom`,
+        `Página ${i} de ${totalPages} - EduFlow`,
         pageWidth / 2,
         pageHeight - 10,
         { align: 'center' }
@@ -189,7 +189,7 @@ export const exportService = {
     });
 
     text += '\n' + '='.repeat(80) + '\n';
-    text += `Exportado desde PBL Classroom el ${format(new Date(), "dd 'de' MMMM 'de' yyyy 'a las' HH:mm")}\n`;
+    text += `Exportado desde EduFlow el ${format(new Date(), "dd 'de' MMMM 'de' yyyy 'a las' HH:mm")}\n`;
 
     // Crear blob y descargar
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });

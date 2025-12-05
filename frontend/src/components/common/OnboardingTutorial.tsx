@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ChevronRight, ChevronLeft, GraduationCap, BookOpen, MessageSquare, FileText, BarChart3, Users, Brain, Sparkles, CheckCircle } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, GraduationCap, BookOpen, MessageSquare, FileText, BarChart3, Users, Zap, Sparkles, Rocket, CheckCircle, Brain } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { UserRole } from '../../types';
 
@@ -22,9 +22,9 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ role, is
 
   const studentSteps = [
     {
-      icon: BookOpen,
-      title: "Bienvenido a PBL Classroom",
-      description: "Una plataforma educativa impulsada por IA diseñada para ayudarte a aprender mediante el método de Aprendizaje Basado en Problemas (PBL).",
+      icon: Rocket,
+      title: "¡Bienvenido a EduFlow!",
+      description: "Tu plataforma educativa inteligente diseñada para potenciar tu aprendizaje mediante el método de Aprendizaje Basado en Problemas (PBL).",
       content: (
         <div className="space-y-3 text-left">
           <p className={`text-sm font-semibold ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
@@ -58,7 +58,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ role, is
           </p>
           <ul className={`space-y-2 text-sm ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
             <li className="flex items-start gap-2">
-              <Brain className={`w-4 h-4 mt-0.5 flex-shrink-0 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
+              <Zap className={`w-4 h-4 mt-0.5 flex-shrink-0 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
               <span>Haz preguntas sobre conceptos, métodos o dudas que tengas</span>
             </li>
             <li className="flex items-start gap-2">
@@ -118,9 +118,9 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({ role, is
 
   const teacherSteps = [
     {
-      icon: GraduationCap,
-      title: "Bienvenido a PBL Classroom",
-      description: "Una plataforma educativa impulsada por IA para gestionar tus cursos y ayudar a tus estudiantes.",
+      icon: Rocket,
+      title: "¡Bienvenido a EduFlow!",
+      description: "Tu plataforma educativa inteligente para gestionar tus cursos y potenciar el aprendizaje de tus estudiantes.",
       content: (
         <div className="space-y-3 text-left">
           <p className={`text-sm font-semibold ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>

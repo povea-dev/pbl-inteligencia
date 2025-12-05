@@ -122,35 +122,10 @@ export async function signInWithGoogle(role?: UserRole | null): Promise<{ user: 
     const userSnap = await getDoc(userRef);
     
     if (!userSnap.exists()) {
-      // Detectar rol automáticamente del correo
-      let finalRole = role || detectRoleFromEmail(user.email);
-      const needsRoleSelection = !finalRole;
-      
-      // Si no se puede detectar, usar 'student' como temporal hasta que el usuario seleccione
-      if (!finalRole) {
-        finalRole = 'student';
-      }
-      
-      // Crear nuevo usuario
-      const displayName = user.displayName || '';
-      const nameParts = displayName.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-      
-      await setDoc(userRef, {
-        uid: user.uid,
-        email: user.email,
-        role: finalRole,
-        firstName,
-        lastName,
-        displayName,
-        emailVerified: user.emailVerified,
-        hasSeenTutorial: false, // Marcar que no ha visto el tutorial
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-      
+      // NUNCA crear el usuario automáticamente - SIEMPRE debe seleccionar su rol primero
+      // Esto aplica incluso si se puede detectar el rol del correo
       console.error = originalError; // Restaurar console.error
-      return { user, needsRoleSelection };
+      return { user, needsRoleSelection: true };
     } else {
       // Actualizar emailVerified si cambió
       await setDoc(userRef, {
@@ -196,31 +171,34 @@ export async function signInWithMicrosoft(role?: UserRole | null): Promise<{ use
       let finalRole = role || detectRoleFromEmail(user.email);
       const needsRoleSelection = !finalRole;
       
-      // Si no se puede detectar, usar 'student' como temporal hasta que el usuario seleccione
-      if (!finalRole) {
-        finalRole = 'student';
+      // Solo crear el usuario en Firestore si se puede detectar el rol automáticamente
+      // Si no se puede detectar, el usuario debe seleccionar su rol primero
+      if (finalRole) {
+        // Crear nuevo usuario con rol detectado
+        const displayName = user.displayName || '';
+        const nameParts = displayName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          role: finalRole,
+          firstName,
+          lastName,
+          displayName,
+          emailVerified: user.emailVerified,
+          hasSeenTutorial: false, // Marcar que no ha visto el tutorial
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+        
+        console.error = originalError; // Restaurar console.error
+        return { user, needsRoleSelection: false };
+      } else {
+        // No crear el usuario todavía, necesita seleccionar rol
+        console.error = originalError; // Restaurar console.error
+        return { user, needsRoleSelection: true };
       }
-      
-      // Crear nuevo usuario
-      const displayName = user.displayName || '';
-      const nameParts = displayName.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-      
-      await setDoc(userRef, {
-        uid: user.uid,
-        email: user.email,
-        role: finalRole,
-        firstName,
-        lastName,
-        displayName,
-        emailVerified: user.emailVerified,
-        hasSeenTutorial: false, // Marcar que no ha visto el tutorial
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-      
-      console.error = originalError; // Restaurar console.error
-      return { user, needsRoleSelection };
     } else {
       // Actualizar emailVerified si cambió
       await setDoc(userRef, {
@@ -239,9 +217,36 @@ export async function signInWithMicrosoft(role?: UserRole | null): Promise<{ use
 // Actualizar rol del usuario
 export async function updateUserRole(userId: string, newRole: UserRole): Promise<void> {
   const userRef = doc(db, "users", userId);
-  await setDoc(userRef, {
-    role: newRole
-  }, { merge: true });
+  
+  // Si el usuario no existe todavía, crearlo con el rol seleccionado
+  const userSnap = await getDoc(userRef);
+  const { auth } = await import("../config/firebase");
+  const currentUser = auth.currentUser;
+  
+  if (!userSnap.exists() && currentUser) {
+    // Crear el usuario con el rol seleccionado
+    const displayName = currentUser.displayName || '';
+    const nameParts = displayName.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+    
+    await setDoc(userRef, {
+      uid: userId,
+      email: currentUser.email,
+      role: newRole,
+      firstName,
+      lastName,
+      displayName,
+      emailVerified: currentUser.emailVerified,
+      hasSeenTutorial: false,
+      createdAt: serverTimestamp(),
+    }, { merge: true });
+  } else {
+    // Solo actualizar el rol si el usuario ya existe
+    await setDoc(userRef, {
+      role: newRole
+    }, { merge: true });
+  }
 }
 
 // Marcar que el usuario ha visto el tutorial
