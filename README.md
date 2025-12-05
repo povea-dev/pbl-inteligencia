@@ -404,7 +404,7 @@ pwd  # Debe mostrar: .../pbl-inteligencia/backend
 # Correcto (con dos puntos)
 uvicorn app.main:app --reload
 
-# ❌ Incorrecto (con punto)
+# Incorrecto (con punto)
 uvicorn app.main.app --reload
 ```
 
