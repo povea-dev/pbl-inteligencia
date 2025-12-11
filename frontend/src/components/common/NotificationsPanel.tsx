@@ -21,29 +21,44 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isOpen || !userId) return;
+    if (!userId) return;
 
-    const loadNotifications = async () => {
-      try {
-        const notifs = await notificationsService.getUserNotifications(userId);
-        setNotifications(notifs);
-      } catch (error) {
-        console.error('Error cargando notificaciones:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    console.log('[NotificationsPanel] Configurando suscripción en tiempo real para:', userId);
 
-    loadNotifications();
+    // Cargar notificaciones iniciales si el panel está abierto
+    if (isOpen) {
+      const loadNotifications = async () => {
+        try {
+          const notifs = await notificationsService.getUserNotifications(userId);
+          console.log('[NotificationsPanel] Notificaciones iniciales cargadas:', notifs.length);
+          setNotifications(notifs);
+        } catch (error) {
+          console.error('Error cargando notificaciones:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
 
-    // Suscribirse a notificaciones en tiempo real
+      loadNotifications();
+    } else {
+      setLoading(false);
+    }
+
+    // Suscribirse a notificaciones en tiempo real (siempre, no solo cuando está abierto)
     const unsubscribe = notificationsService.subscribeToNotifications(userId, (notifs) => {
+      console.log('[NotificationsPanel] Notificaciones actualizadas en tiempo real:', {
+        cantidad: notifs.length,
+        noLeidas: notifs.filter(n => !n.read).length
+      });
       setNotifications(notifs);
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [isOpen, userId]);
+    return () => {
+      console.log('[NotificationsPanel] Desuscribiéndose de notificaciones');
+      unsubscribe();
+    };
+  }, [userId, isOpen]);
 
   const handleMarkAsRead = async (notificationId: string) => {
     try {

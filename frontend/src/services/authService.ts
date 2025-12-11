@@ -70,9 +70,12 @@ export async function register(email: string, password: string, role: UserRole, 
   
   const ref = doc(db, "users", cred.user.uid);
   const fullName = `${firstName} ${lastName}`;
+  // Normalizar el email antes de guardarlo (minúsculas, sin espacios)
+  const normalizedEmail = email.toLowerCase().trim();
+  
   await setDoc(ref, {
     uid: cred.user.uid,
-    email,
+    email: normalizedEmail,
     role: finalRole,
     firstName,
     lastName,
@@ -180,9 +183,12 @@ export async function signInWithMicrosoft(role?: UserRole | null): Promise<{ use
         const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || '';
         
+        // Normalizar el email antes de guardarlo (minúsculas, sin espacios)
+        const normalizedEmail = user.email ? user.email.toLowerCase().trim() : user.email;
+        
         await setDoc(userRef, {
           uid: user.uid,
-          email: user.email,
+          email: normalizedEmail,
           role: finalRole,
           firstName,
           lastName,
@@ -230,9 +236,12 @@ export async function updateUserRole(userId: string, newRole: UserRole): Promise
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
     
+    // Normalizar el email antes de guardarlo (minúsculas, sin espacios)
+    const normalizedEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : currentUser.email;
+    
     await setDoc(userRef, {
       uid: userId,
-      email: currentUser.email,
+      email: normalizedEmail,
       role: newRole,
       firstName,
       lastName,

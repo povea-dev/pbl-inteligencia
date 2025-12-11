@@ -39,12 +39,25 @@ export const StudentHome: React.FC<StudentHomeProps> = ({ user, onLogout }) => {
   const [showTutorial, setShowTutorial] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [currentUser, setCurrentUser] = useState<AppUser>(user);
+  const [hasNewNotification, setHasNewNotification] = useState(false);
 
   const loadCourses = useCallback(async () => {
     setLoading(true);
     try {
+      console.log('[StudentHome] Cargando cursos para estudiante:', {
+        uid: user.uid,
+        email: user.email,
+        role: user.role
+      });
+      
       // Obtener solo los cursos en los que el estudiante está inscrito
       const coursesData = await coursesService.getCoursesByStudent(user.uid);
+      
+      console.log('[StudentHome] Cursos obtenidos:', {
+        cantidad: coursesData.length,
+        cursos: coursesData.map(c => ({ id: c.id, title: c.title }))
+      });
+      
       setCourses(coursesData);
     } catch (error) {
       console.error('Error cargando cursos:', error);
@@ -74,20 +87,36 @@ export const StudentHome: React.FC<StudentHomeProps> = ({ user, onLogout }) => {
     loadCourses();
   }, [loadCourses]);
 
-  // Cargar contador de notificaciones no leídas
+  // Suscribirse a notificaciones en tiempo real para actualizar el contador
   useEffect(() => {
-    const loadUnreadCount = async () => {
-      try {
-        const count = await notificationsService.getUnreadCount(user.uid);
-        setUnreadCount(count);
-      } catch (error) {
-        console.error('Error cargando contador de notificaciones:', error);
+    console.log('[StudentHome] Suscribiéndose a notificaciones en tiempo real para:', user.uid);
+    
+    // Suscribirse a notificaciones en tiempo real
+    let previousUnreadCount = 0;
+    const unsubscribe = notificationsService.subscribeToNotifications(user.uid, (notifications) => {
+      const unread = notifications.filter(n => !n.read).length;
+      console.log('[StudentHome] Notificaciones actualizadas en tiempo real:', {
+        total: notifications.length,
+        noLeidas: unread,
+        anterior: previousUnreadCount
+      });
+      
+      // Si hay una nueva notificación no leída, mostrar indicador
+      if (unread > previousUnreadCount) {
+        console.log('[StudentHome] 🎉 Nueva notificación recibida!');
+        setHasNewNotification(true);
+        // Ocultar el indicador después de 3 segundos
+        setTimeout(() => setHasNewNotification(false), 3000);
       }
-    };
+      
+      previousUnreadCount = unread;
+      setUnreadCount(unread);
+    });
 
-    loadUnreadCount();
-    const interval = setInterval(loadUnreadCount, 30000); // Actualizar cada 30 segundos
-    return () => clearInterval(interval);
+    return () => {
+      console.log('[StudentHome] Desuscribiéndose de notificaciones');
+      unsubscribe();
+    };
   }, [user.uid]);
 
   const handleGoToCourse = (courseId: string) => {
@@ -159,17 +188,22 @@ export const StudentHome: React.FC<StudentHomeProps> = ({ user, onLogout }) => {
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
-                onClick={() => setShowNotifications(true)}
-                className={`relative p-2 rounded-lg transition-colors ${
+                onClick={() => {
+                  setShowNotifications(true);
+                  setHasNewNotification(false);
+                }}
+                className={`relative p-2 rounded-lg transition-all ${
                   darkMode 
                     ? 'text-slate-300 hover:text-white hover:bg-slate-700' 
                     : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+                } ${hasNewNotification ? 'animate-pulse' : ''}`}
                 title="Notificaciones"
               >
-                <Bell className="w-5 h-5" />
+                <Bell className={`w-5 h-5 ${hasNewNotification ? 'text-red-600' : ''}`} />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                  <span className={`absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center ${
+                    hasNewNotification ? 'animate-bounce' : ''
+                  }`}>
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}

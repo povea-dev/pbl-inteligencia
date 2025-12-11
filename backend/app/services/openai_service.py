@@ -18,13 +18,82 @@ class OpenAIService:
     """Servicio para interactuar con OpenAI (GPT) manteniendo la misma interfaz que ClaudeService."""
 
     def __init__(self):
-        settings = get_settings()
-        api_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", None)
-        if not api_key:
-            raise ValueError("Falta OPENAI_API_KEY en .env o en tu settings.")
-        self.client = OpenAI(api_key=api_key)
+        self._load_api_key()
         # Puedes cambiar el modelo aquí centralmente
         self.model = "gpt-4o-mini"
+    
+    def _load_api_key(self):
+        """Carga la API key desde las variables de entorno o settings"""
+        # IMPORTANTE: Priorizar el archivo .env sobre variables de entorno del sistema
+        # para evitar conflictos con API keys antiguas en el sistema
+        
+        api_key = None
+        source = None
+        
+        # Verificar si hay variable de entorno del sistema primero (para advertir)
+        system_env_key = os.getenv("OPENAI_API_KEY")
+        if system_env_key:
+            print(f"[WARNING] Se detectó variable de entorno OPENAI_API_KEY en el sistema")
+            print(f"[WARNING] Esta variable puede estar sobrescribiendo el archivo .env")
+            print(f"[WARNING] Para eliminarla, ejecuta: Remove-Item Env:\\OPENAI_API_KEY")
+        
+        # Limpiar caché de settings para forzar recarga del .env
+        from config import clear_settings_cache
+        clear_settings_cache()
+        
+        # Cargar desde settings (lee del .env)
+        try:
+            settings = get_settings()
+            api_key = getattr(settings, "OPENAI_API_KEY", None)
+            if api_key:
+                source = "archivo .env (via settings)"
+        except Exception as e:
+            print(f"[WARNING] Error cargando desde settings: {e}")
+        
+        # Si no está en settings, intentar desde variable de entorno
+        if not api_key:
+            api_key = system_env_key
+            if api_key:
+                source = "variable de entorno del sistema"
+                print(f"[WARNING] Usando API key de variable de entorno del sistema en lugar del .env")
+                print(f"[WARNING] Esto puede causar problemas si la variable tiene una API key antigua")
+        
+        if not api_key:
+            raise ValueError("Falta OPENAI_API_KEY en .env o en tu settings.")
+        
+        # Limpiar espacios en blanco al inicio y final de la API key
+        api_key = api_key.strip()
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY está vacía o solo contiene espacios. Verifica tu archivo .env")
+        
+        # Verificar formato básico
+        if not api_key.startswith("sk-"):
+            print(f"[ADVERTENCIA] La API key no parece tener el formato correcto (debería empezar con 'sk-')")
+        
+        # Debug: mostrar primeros y últimos caracteres (sin exponer la key completa)
+        print(f"[INFO] API key cargada desde: {source}")
+        print(f"[INFO] API key: {api_key[:20]}...{api_key[-10:]} (longitud: {len(api_key)})")
+        
+        # Verificar que termine con los caracteres esperados de la nueva key
+        expected_end = "zsCSFMEA"
+        if not api_key.endswith(expected_end):
+            print(f"[WARNING] La API key NO termina con '{expected_end}' como se esperaba")
+            print(f"[WARNING] Termina con: '{api_key[-15:]}'")
+            print(f"[WARNING] Esto indica que se está usando una API key antigua o incorrecta")
+            print(f"[WARNING]")
+            print(f"[WARNING] SOLUCIÓN:")
+            print(f"[WARNING] 1. Verifica que el archivo backend/.env tenga la API key correcta")
+            print(f"[WARNING] 2. Si hay variable de entorno, elimínala: Remove-Item Env:\\OPENAI_API_KEY")
+            print(f"[WARNING] 3. Reinicia el servidor backend completamente")
+        
+        self.client = OpenAI(api_key=api_key)
+        self.api_key = api_key  # Guardar para referencia
+    
+    def reload_api_key(self):
+        """Recarga la API key (útil después de actualizar .env)"""
+        from config import clear_settings_cache
+        clear_settings_cache()
+        self._load_api_key()
 
     def _build_system_prompt(self, course_files: List[dict] = None, course_title: str = "", file_contents: str = "") -> str:
         """Construye el prompt del sistema con contexto del curso y contenido de archivos."""
@@ -125,7 +194,11 @@ Responde SOLO con "SÍ" si el contenido está relacionado con el curso, o "NO" s
             
         except Exception as e:
             print(f"[ERROR] Error verificando relevancia: {e}")
-            # En caso de error, asumir que está relacionado para no bloquear respuestas
+            # Si es un error de API key, no asumir que está relacionado
+            if "api_key" in str(e).lower() or "401" in str(e) or "invalid_api_key" in str(e).lower():
+                print(f"[ERROR] Problema con la API key de OpenAI. Verifica que tu OPENAI_API_KEY en el archivo .env sea correcta.")
+                raise
+            # En caso de otros errores, asumir que está relacionado para no bloquear respuestas
             return True
 
     def _build_messages(self, request: FeedbackRequest, course_files: List[dict] = None, course_title: str = "", file_contents: str = "") -> List[dict]:
@@ -274,8 +347,16 @@ Responde SOLO con "SÍ" si el contenido está relacionado con el curso, o "NO" s
             )
 
         except Exception as e:
+            error_str = str(e)
             print(f"Error OpenAI: {e}")
-            error_msg = "Lo siento, hubo un error al procesar tu respuesta con OpenAI. Intenta nuevamente."
+            
+            # Detectar errores específicos de API key
+            if "api_key" in error_str.lower() or "401" in error_str or "invalid_api_key" in error_str.lower():
+                error_msg = "Error de autenticación con OpenAI. Por favor, verifica que la API key en el archivo .env sea correcta y esté activa. Puedes obtener una nueva clave en https://platform.openai.com/account/api-keys"
+                print(f"[ERROR CRÍTICO] {error_msg}")
+            else:
+                error_msg = "Lo siento, hubo un error al procesar tu respuesta con OpenAI. Intenta nuevamente."
+            
             return FeedbackResponse(
                 response=error_msg,  # Frontend espera 'response'
                 feedback=error_msg,  # Mantener para compatibilidad
@@ -288,4 +369,6 @@ Responde SOLO con "SÍ" si el contenido está relacionado con el curso, o "NO" s
 
 
 # Instancia única del servicio
+# NOTA: Esta instancia se crea al importar el módulo.
+# Si actualizas el archivo .env, DEBES reiniciar el servidor para que se recargue.
 openai_service = OpenAIService()

@@ -59,6 +59,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
   const [studentEmail, setStudentEmail] = useState('');
   const [addingStudent, setAddingStudent] = useState(false);
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
 
   const loadCourses = useCallback(async () => {
     setLoading(true);
@@ -117,13 +118,30 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
   }, [loadFiles]);
 
   const loadStudents = useCallback(async () => {
-    if (!selectedCourse) return;
+    if (!selectedCourse) {
+      console.log('[TeacherHome] loadStudents: No hay curso seleccionado');
+      return;
+    }
+    
+    console.log('[TeacherHome] loadStudents: Cargando estudiantes para curso:', {
+      courseId: selectedCourse.id,
+      courseTitle: selectedCourse.title
+    });
     
     try {
       const studentsData = await studentsService.getCourseStudents(selectedCourse.id);
+      console.log('[TeacherHome] loadStudents: Estudiantes cargados:', {
+        cantidad: studentsData.length,
+        estudiantes: studentsData.map(s => ({
+          id: s.id,
+          email: s.email,
+          displayName: s.displayName
+        }))
+      });
       setStudents(studentsData);
     } catch (error) {
-      console.error('Error cargando estudiantes:', error);
+      console.error('[TeacherHome] Error cargando estudiantes:', error);
+      setStudents([]);
     }
   }, [selectedCourse]);
 
@@ -131,18 +149,130 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
     loadStudents();
   }, [loadStudents]);
 
-  const handleAddStudent = async () => {
-    if (!selectedCourse || !studentEmail.trim()) return;
+  const handleRemoveStudent = async (enrollmentId: string, studentName: string) => {
+    if (!selectedCourse) return;
     
+    const confirmed = window.confirm(
+      `¿Estás seguro de que deseas eliminar a ${studentName} del curso "${selectedCourse.title}"?\n\nEsta acción no se puede deshacer.`
+    );
+    
+    if (!confirmed) return;
+    
+    setRemovingStudentId(enrollmentId);
+    
+    try {
+      console.log('[TeacherHome] Eliminando estudiante:', {
+        courseId: selectedCourse.id,
+        enrollmentId,
+        studentName
+      });
+      
+      await studentsService.removeStudentFromCourse(selectedCourse.id, enrollmentId);
+      
+      console.log('[TeacherHome] Estudiante eliminado exitosamente');
+      
+      // Recargar la lista de estudiantes
+      await loadStudents();
+      
+      // Mostrar mensaje de éxito
+      alert(`${studentName} ha sido eliminado del curso exitosamente`);
+      
+    } catch (error: any) {
+      console.error('[TeacherHome] Error eliminando estudiante:', error);
+      alert(`Error al eliminar estudiante: ${error.message || 'Error desconocido'}`);
+    } finally {
+      setRemovingStudentId(null);
+    }
+  };
+
+  const handleAddStudent = async () => {
+    console.log('[TeacherHome] handleAddStudent llamado');
+    console.log('[TeacherHome] Estado actual:', {
+      hasSelectedCourse: !!selectedCourse,
+      selectedCourseId: selectedCourse?.id,
+      selectedCourseTitle: selectedCourse?.title,
+      studentEmail: studentEmail,
+      studentEmailTrimmed: studentEmail.trim(),
+      hasEmail: !!studentEmail.trim()
+    });
+    
+    if (!selectedCourse) {
+      console.error('[TeacherHome] ERROR: No hay curso seleccionado');
+      setStudentError('Por favor, selecciona un curso primero');
+      return;
+    }
+    
+    if (!studentEmail.trim()) {
+      console.error('[TeacherHome] ERROR: No hay email ingresado');
+      setStudentError('Por favor, ingresa el email del estudiante');
+      return;
+    }
+    
+    console.log('[TeacherHome] Iniciando proceso de agregar estudiante...');
     setAddingStudent(true);
     setStudentError(null);
     
     try {
-      await studentsService.addStudentToCourse(selectedCourse.id, studentEmail.trim());
+      const emailToAdd = studentEmail.trim();
+      console.log('[TeacherHome] Intentando agregar estudiante:', {
+        courseId: selectedCourse.id,
+        courseTitle: selectedCourse.title,
+        studentEmail: emailToAdd
+      });
+      
+      // Obtener nombre del docente para la notificación
+      const teacherFullName = user.displayName || 
+        (user.firstName && user.lastName 
+          ? `${user.firstName} ${user.lastName}`.trim()
+          : user.email || 'Profesor');
+      
+      await studentsService.addStudentToCourse(selectedCourse.id, emailToAdd, teacherFullName);
+      
+      console.log('[TeacherHome] Estudiante agregado exitosamente');
+      
+      // Mostrar mensaje de éxito temporalmente
+      setStudentError(null);
       setStudentEmail('');
+      
+      // Recargar la lista de estudiantes
       await loadStudents();
+      
+      // Mostrar mensaje de éxito (podríamos usar un toast aquí)
+      alert(`Estudiante ${emailToAdd} agregado exitosamente al curso`);
+      
     } catch (error: any) {
-      setStudentError(error.message || 'Error al agregar estudiante');
+      console.error('[TeacherHome] Error agregando estudiante:', error);
+      console.error('[TeacherHome] Stack trace:', error.stack);
+      
+      let errorMessage = 'Error al agregar estudiante';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.code) {
+        errorMessage = `Error de Firebase: ${error.code}`;
+      }
+      
+      setStudentError(errorMessage);
+      
+      // Mostrar error más detallado en consola
+      if (errorMessage.includes('No se encontró')) {
+        console.error('[TeacherHome] El estudiante no existe en la base de datos. Asegúrate de que:');
+        console.error('  1. El estudiante haya iniciado sesión al menos una vez');
+        console.error('  2. El email sea exactamente el mismo que usó para registrarse');
+        console.error('  3. El estudiante tenga el rol "student" en su perfil');
+      } else if (errorMessage.includes('ya está inscrito')) {
+        console.warn('[TeacherHome] El estudiante ya está inscrito en este curso');
+      } else {
+        console.error('[TeacherHome] Error desconocido:', {
+          error,
+          message: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+      }
+      
+      // Mostrar alerta con el error
+      alert(`Error al agregar estudiante: ${errorMessage}`);
     } finally {
       setAddingStudent(false);
     }
@@ -551,7 +681,15 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                               />
                             </div>
                             <button
-                              onClick={handleAddStudent}
+                              onClick={(e) => {
+                                console.log('[TeacherHome] Botón "Agregar" clickeado', e);
+                                console.log('[TeacherHome] Estado antes de llamar handleAddStudent:', {
+                                  selectedCourse: !!selectedCourse,
+                                  studentEmail: studentEmail,
+                                  addingStudent: addingStudent
+                                });
+                                handleAddStudent();
+                              }}
                               disabled={addingStudent || !studentEmail.trim()}
                               className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-slate-700 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:from-red-700 hover:to-slate-800 font-semibold shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
                             >
@@ -577,9 +715,18 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                               <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
                                 darkMode ? 'text-red-400' : 'text-red-600'
                               }`} />
-                              <p className={`text-sm font-medium ${
-                                darkMode ? 'text-red-300' : 'text-red-800'
-                              }`}>{studentError}</p>
+                              <div className="flex-1">
+                                <p className={`text-sm font-medium mb-2 ${
+                                  darkMode ? 'text-red-300' : 'text-red-800'
+                                }`}>{studentError}</p>
+                                {studentError.includes('No se encontró') && (
+                                  <p className={`text-xs ${
+                                    darkMode ? 'text-red-400' : 'text-red-700'
+                                  }`}>
+                                    💡 Abre la consola del navegador (F12) para ver la lista de estudiantes disponibles.
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -618,7 +765,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                                       : 'bg-white border-slate-200 hover:border-red-300 hover:shadow-md'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-4 flex-1">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
                                       darkMode
                                         ? 'bg-gradient-to-br from-red-900/50 to-slate-900/50 border-red-700'
@@ -626,7 +773,7 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                                     }`}>
                                       <User className={`w-5 h-5 ${darkMode ? 'text-red-400' : 'text-red-600'}`} />
                                     </div>
-                                    <div>
+                                    <div className="flex-1">
                                       <p className={`text-sm font-semibold ${
                                         darkMode ? 'text-white' : 'text-slate-900'
                                       }`}>
@@ -637,9 +784,27 @@ export const TeacherHome: React.FC<TeacherHomeProps> = ({ user, onLogout }) => {
                                       </p>
                                     </div>
                                   </div>
-                                  <span className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                                    Inscrito {student.enrolledAt.toLocaleDateString()}
-                                  </span>
+                                  <div className="flex items-center gap-3">
+                                    <span className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                      Inscrito {student.enrolledAt.toLocaleDateString()}
+                                    </span>
+                                    <button
+                                      onClick={() => handleRemoveStudent(student.id, student.displayName || student.email)}
+                                      disabled={removingStudentId === student.id}
+                                      className={`p-2 rounded-lg transition-all ${
+                                        darkMode
+                                          ? 'hover:bg-red-900/30 text-red-400 hover:text-red-300'
+                                          : 'hover:bg-red-50 text-red-600 hover:text-red-700'
+                                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                      title="Eliminar estudiante del curso"
+                                    >
+                                      {removingStudentId === student.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>

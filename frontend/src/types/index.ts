@@ -46,19 +46,6 @@ export interface Conversation {
   lastMessageAt: Date;
   messageCount: number;
   status: 'active' | 'archived';
-  tags?: string[]; // Etiquetas/categorías
-  sharedWith?: string[]; // IDs de usuarios con los que se compartió
-  teacherComments?: TeacherComment[]; // Comentarios del docente
-}
-
-export interface TeacherComment {
-  id: string;
-  conversationId: string;
-  teacherId: string;
-  teacherName: string;
-  comment: string;
-  createdAt: Date;
-  isPrivate: boolean; // Si es privado, solo lo ve el docente
 }
 
 export interface SearchResult {
@@ -111,43 +98,7 @@ export interface StudentActivity {
   topTopics: string[];
 }
 
-// ========== PERSONAL STATS ==========
-export interface PersonalStats {
-  totalMessages: number;
-  totalConversations: number;
-  averageMessagesPerConversation: number;
-  totalTimeSpent: number; // en minutos
-  messagesByDay: Array<{ date: string; count: number }>;
-  conversationsByDay: Array<{ date: string; count: number }>;
-  topTopics: Array<{ topic: string; count: number }>;
-  activityByHour: Array<{ hour: number; count: number }>;
-}
 
-// ========== REMINDERS ==========
-export interface Reminder {
-  id: string;
-  courseId: string;
-  teacherId: string;
-  title: string;
-  description: string;
-  targetDate: Date;
-  targetUsers: string[]; // IDs de estudiantes, o 'all' para todos
-  createdAt: Date;
-  sent: boolean;
-  sentAt?: Date;
-}
-
-// ========== FILTERS ==========
-export interface ConversationFilters {
-  search?: string;
-  tags?: string[];
-  dateFrom?: Date;
-  dateTo?: Date;
-  studentId?: string; // Para docentes
-  sortBy?: 'date' | 'title' | 'messages' | 'relevance';
-  sortOrder?: 'asc' | 'desc';
-  status?: 'active' | 'archived' | 'all';
-}
 
 // ========== API TYPES ==========
 export interface FeedbackRequest {

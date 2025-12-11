@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -19,7 +20,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     
     class Config:
-        env_file = ".env"
+        # Buscar .env en el directorio backend/ (un nivel arriba de app/)
+        env_file = str(Path(__file__).parent.parent / ".env")
         case_sensitive = True
 
 
@@ -27,3 +29,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Obtiene la configuración (cacheada)"""
     return Settings()
+
+def clear_settings_cache():
+    """Limpia el caché de configuración (útil cuando se actualiza .env)"""
+    get_settings.cache_clear()
